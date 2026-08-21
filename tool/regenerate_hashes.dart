@@ -5,6 +5,7 @@
 import 'dart:io';
 
 import 'package:crypto/crypto.dart' show sha256;
+import 'package:sigstore/src/hook_helpers/builder.dart';
 
 Future<void> main(List<String> args) async {
   if (args.isEmpty) {
@@ -16,21 +17,7 @@ Future<void> main(List<String> args) async {
 
   print('Checking hashes for $version');
   final fileHashes = <(String, String), String>{};
-  for (final rustTarget in [
-    'armv7-linux-androideabi',
-    'aarch64-linux-android',
-    'x86_64-linux-android',
-    'aarch64-apple-ios',
-    'x86_64-apple-ios',
-    'armv7-unknown-linux-gnueabihf',
-    'aarch64-unknown-linux-gnu',
-    'riscv64gc-unknown-linux-gnu',
-    'x86_64-unknown-linux-gnu',
-    'aarch64-apple-darwin',
-    'x86_64-apple-darwin',
-    'aarch64-pc-windows-msvc',
-    'x86_64-pc-windows-msvc',
-  ]) {
+  for (final rustTarget in allTargets) {
     for (final libraryType in ['dynamic', 'static']) {
       final uri = Uri.parse(
         'https://github.com/mosuem/sigstore/releases/'
