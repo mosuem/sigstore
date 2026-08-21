@@ -1,0 +1,21 @@
+# A CI configuration to auto-publish pub packages using dart-lang/ecosystem.
+
+name: Publish
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+jobs:
+  publish:
+    uses: dart-lang/ecosystem/.github/workflows/publish.yaml@b4772d80b6fc3a6b1cd3dc23f370ce8e61b968f3 # main
+    permissions:
+      id-token: write # Required for authentication using OIDC on pub.dev
+      pull-requests: write # Required for writing the pull request note / publishing status

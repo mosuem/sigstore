@@ -58,7 +58,9 @@ hooks:
       CodeAsset(
         package: input.packageName,
         name: 'src/bindings/lib.g.dart',
-        linkMode: DynamicLoadingBundled(),
+        linkMode: input.config.buildStatic
+            ? StaticLinking()
+            : DynamicLoadingBundled(),
         file: builtLibrary,
       ),
     );
@@ -259,8 +261,7 @@ String _asRustTarget(CodeConfig code) {
 }
 
 extension on BuildConfig {
-  bool get buildStatic =>
-      code.linkModePreference == LinkModePreference.static || linkingEnabled;
+  bool get buildStatic => code.linkModePreference == LinkModePreference.static;
 
   String Function(String) get filename => buildStatic
       ? code.targetOS.staticlibFileName

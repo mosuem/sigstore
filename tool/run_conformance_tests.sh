@@ -13,16 +13,8 @@ export PATH="$HOME/.local/bin:$PATH"
 echo "==> Resolving dependencies..."
 dart pub get
 
-echo "==> Preparing Sigstore conformance CLI wrapper..."
-cat << 'INNER_EOF' > "$DIR/bin/conformance"
-#!/usr/bin/env bash
-CALLER_CWD="$(pwd)"
-SIGSTORE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export CONFORMANCE_CWD="$CALLER_CWD"
-cd "$SIGSTORE_DIR"
-exec dart run bin/conformance.dart "$@"
-INNER_EOF
-chmod +x "$DIR/bin/conformance"
+echo "==> Building Sigstore conformance CLI binary..."
+dart build cli -t bin/conformance.dart -o build/conformance_cli
 
 echo "==> Running Sigstore conformance tests..."
 CONFORMANCE_DIR="/tmp/sigstore-conformance-repo"
@@ -48,7 +40,7 @@ elif python3 -m pytest --version &> /dev/null; then
 fi
 
 if [ -n "$PYTEST_CMD" ]; then
-  $PYTEST_CMD --entrypoint "$DIR/bin/conformance" --skip-signing "$CONFORMANCE_DIR/test"
+  $PYTEST_CMD --entrypoint "$DIR/build/conformance_cli/bundle/bin/conformance" --skip-signing "$CONFORMANCE_DIR/test"
 else
   echo "pytest not found in PATH."
   exit 1
