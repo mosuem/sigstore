@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  dart-rust-ci:
+    name: Dart & Rust Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Dart SDK
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 'stable'
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install Dart Dependencies
+        run: dart pub get
+
+      - name: Verify Dart Formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze Dart Code
+        run: dart analyze --fatal-infos
+
+      - name: Verify Rust Formatting
+        run: cargo fmt --check --manifest-path rust/Cargo.toml
+
+      - name: Run Rust Clippy Linter
+        run: cargo clippy --manifest-path rust/Cargo.toml -- -D warnings
+
+      - name: Run Dart Unit Tests
+        run: dart test
+
+  conformance:
+    name: Sigstore Conformance Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Dart SDK
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 'stable'
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: Run Conformance Test Suite
+        run: ./tool/run_conformance_tests.sh

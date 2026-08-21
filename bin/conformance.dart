@@ -40,16 +40,15 @@ Future<void> main(List<String> args) async {
 }
 
 Future<void> _handleVerifyBundle(List<String> args) async {
-  final parser =
-      ArgParser(allowTrailingOptions: true)
-        ..addOption('bundle', mandatory: true)
-        ..addOption('certificate-identity', mandatory: false)
-        ..addOption('certificate-oidc-issuer', mandatory: false)
-        ..addOption('key', mandatory: false)
-        ..addOption('trusted-root', mandatory: false)
-        ..addOption('signing-config', mandatory: false)
-        ..addFlag('staging', defaultsTo: false)
-        ..addFlag('offline', defaultsTo: false);
+  final parser = ArgParser(allowTrailingOptions: true)
+    ..addOption('bundle', mandatory: true)
+    ..addOption('certificate-identity', mandatory: false)
+    ..addOption('certificate-oidc-issuer', mandatory: false)
+    ..addOption('key', mandatory: false)
+    ..addOption('trusted-root', mandatory: false)
+    ..addOption('signing-config', mandatory: false)
+    ..addFlag('staging', defaultsTo: false)
+    ..addFlag('offline', defaultsTo: false);
 
   ArgResults results;
   try {
@@ -146,14 +145,13 @@ Future<void> _handleVerifyBundle(List<String> args) async {
 }
 
 Future<void> _handleSignBundle(List<String> args) async {
-  final parser =
-      ArgParser(allowTrailingOptions: true)
-        ..addOption('identity-token', mandatory: true)
-        ..addOption('bundle', mandatory: true)
-        ..addOption('trusted-root', mandatory: false)
-        ..addOption('signing-config', mandatory: false)
-        ..addFlag('staging', defaultsTo: false)
-        ..addFlag('in-toto', defaultsTo: false);
+  final parser = ArgParser(allowTrailingOptions: true)
+    ..addOption('identity-token', mandatory: true)
+    ..addOption('bundle', mandatory: true)
+    ..addOption('trusted-root', mandatory: false)
+    ..addOption('signing-config', mandatory: false)
+    ..addFlag('staging', defaultsTo: false)
+    ..addFlag('in-toto', defaultsTo: false);
 
   ArgResults results;
   try {

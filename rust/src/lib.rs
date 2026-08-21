@@ -38,14 +38,33 @@ pub mod ffi {
     }
 
     fn opt_str(s: &DiplomatStr) -> Option<String> {
-        std::str::from_utf8(s).ok().filter(|s| !s.is_empty()).map(|s| s.to_string())
+        std::str::from_utf8(s)
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
     }
 
     fn validate_trusted_root(root: &sigstore_trust_root::TrustedRoot) -> Result<(), SigstoreError> {
-        let tlog_valid = root.tlogs.iter().all(|t| t.public_key.valid_for.as_ref().map_or(true, |v| v.start.is_some()));
-        let ctlog_valid = root.ctlogs.iter().all(|t| t.public_key.valid_for.as_ref().map_or(true, |v| v.start.is_some()));
-        let ca_valid = root.certificate_authorities.iter().all(|ca| ca.valid_for.as_ref().map_or(true, |v| v.start.is_some()));
-        let tsa_valid = root.timestamp_authorities.iter().all(|tsa| tsa.valid_for.as_ref().map_or(true, |v| v.start.is_some()));
+        let tlog_valid = root.tlogs.iter().all(|t| {
+            t.public_key
+                .valid_for
+                .as_ref()
+                .is_none_or(|v| v.start.is_some())
+        });
+        let ctlog_valid = root.ctlogs.iter().all(|t| {
+            t.public_key
+                .valid_for
+                .as_ref()
+                .is_none_or(|v| v.start.is_some())
+        });
+        let ca_valid = root
+            .certificate_authorities
+            .iter()
+            .all(|ca| ca.valid_for.as_ref().is_none_or(|v| v.start.is_some()));
+        let tsa_valid = root
+            .timestamp_authorities
+            .iter()
+            .all(|tsa| tsa.valid_for.as_ref().is_none_or(|v| v.start.is_some()));
 
         if tlog_valid && ctlog_valid && ca_valid && tsa_valid {
             Ok(())
@@ -78,23 +97,24 @@ pub mod ffi {
     impl SigstoreBundle {
         fn cert_info(&self) -> Result<sigstore_verify::crypto::CertificateInfo, SigstoreError> {
             let cert_der = match &self.0.verification_material.content {
-                sigstore_types::bundle::VerificationMaterialContent::X509CertificateChain { certificates } => {
-                    certificates.first().map(|c| c.raw_bytes.as_ref())
-                }
+                sigstore_types::bundle::VerificationMaterialContent::X509CertificateChain {
+                    certificates,
+                } => certificates.first().map(|c| c.raw_bytes.as_ref()),
                 sigstore_types::bundle::VerificationMaterialContent::Certificate(cert) => {
                     Some(cert.raw_bytes.as_ref())
                 }
                 _ => None,
             };
             let der = cert_der.ok_or(SigstoreError::InvalidBundle)?;
-            sigstore_verify::crypto::parse_certificate_info(der).map_err(|_| SigstoreError::InvalidBundle)
+            sigstore_verify::crypto::parse_certificate_info(der)
+                .map_err(|_| SigstoreError::InvalidBundle)
         }
 
         /// Parse a Sigstore bundle from JSON string.
         pub fn from_json(json: &DiplomatStr) -> Result<Box<SigstoreBundle>, SigstoreError> {
             let json_str = std::str::from_utf8(json).map_err(|_| SigstoreError::InvalidBundle)?;
-            let bundle: sigstore_types::Bundle = serde_json::from_str(json_str)
-                .map_err(|_| SigstoreError::InvalidBundle)?;
+            let bundle: sigstore_types::Bundle =
+                serde_json::from_str(json_str).map_err(|_| SigstoreError::InvalidBundle)?;
             Ok(Box::new(SigstoreBundle(bundle)))
         }
 
@@ -106,7 +126,10 @@ pub mod ffi {
         }
 
         /// Get certificate subject (SAN email/URI).
-        pub fn get_certificate_subject(&self, write: &mut DiplomatWrite) -> Result<(), SigstoreError> {
+        pub fn get_certificate_subject(
+            &self,
+            write: &mut DiplomatWrite,
+        ) -> Result<(), SigstoreError> {
             let info = self.cert_info()?;
             let subject = info.identity.unwrap_or_default();
             write!(write, "{}", subject).map_err(|_| SigstoreError::InternalError)?;
@@ -114,7 +137,10 @@ pub mod ffi {
         }
 
         /// Get certificate OIDC issuer.
-        pub fn get_certificate_issuer(&self, write: &mut DiplomatWrite) -> Result<(), SigstoreError> {
+        pub fn get_certificate_issuer(
+            &self,
+            write: &mut DiplomatWrite,
+        ) -> Result<(), SigstoreError> {
             let info = self.cert_info()?;
             let issuer = info.issuer.unwrap_or_default();
             write!(write, "{}", issuer).map_err(|_| SigstoreError::InternalError)?;
@@ -123,7 +149,11 @@ pub mod ffi {
 
         /// Get Rekor log index if present.
         pub fn get_rekor_log_index(&self) -> i64 {
-            self.0.verification_material.tlog_entries.first().map_or(-1, |e| e.log_index.value())
+            self.0
+                .verification_material
+                .tlog_entries
+                .first()
+                .map_or(-1, |e| e.log_index.value())
         }
     }
 
@@ -179,7 +209,8 @@ pub mod ffi {
 
                 let verifier = sigstore_verify::Verifier::new(&trusted_root);
                 verifier.verify(artifact, &bundle.0, &v_policy)
-            }.map_err(|_| SigstoreError::VerificationFailed)?;
+            }
+            .map_err(|_| SigstoreError::VerificationFailed)?;
 
             Ok(Box::new(SigstoreVerificationResult {
                 is_valid: true,
