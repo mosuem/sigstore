@@ -31,7 +31,7 @@ if [ ! -d "$CONFORMANCE_DIR" ]; then
   git clone --depth 1 https://github.com/sigstore/sigstore-conformance.git "$CONFORMANCE_DIR"
 fi
 
-if ! python3 -c "import platformdirs" &> /dev/null; then
+if ! python3 -c "import platformdirs, urllib3, cryptography, sigstore_protobuf_specs" &> /dev/null; then
   echo "Installing sigstore-conformance Python requirements..."
   if [ -f "$CONFORMANCE_DIR/requirements.in" ]; then
     python3 -m pip install -q -r "$CONFORMANCE_DIR/requirements.in"

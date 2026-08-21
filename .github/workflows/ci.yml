@@ -71,7 +71,7 @@ jobs:
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest platformdirs
+          pip install pytest
 
       - name: Run Conformance Test Suite
         run: ./tool/run_conformance_tests.sh
