@@ -9,7 +9,7 @@
 //    dart tool/regenerate_hashes.dart <github tag>
 //
 
-const version = 'v0.1.0';
+const version = 'binaries-v0.1.0';
 
 const fileHashes = <(String, String), String>{
   ('x86_64-unknown-linux-gnu', 'dynamic'):

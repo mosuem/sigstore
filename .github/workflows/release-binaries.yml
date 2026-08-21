@@ -1,15 +1,13 @@
 name: Release Binaries
 
 on:
-  release:
-    types: [published]
   push:
     tags:
-      - 'v*'
+      - 'binaries-v*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to attach binaries to (e.g. v0.1.0-alpha.1)'
+        description: 'Release tag to attach binaries to (e.g. binaries-v0.1.0)'
         required: true
         type: string
 
