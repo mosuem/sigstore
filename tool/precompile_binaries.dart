@@ -4,60 +4,110 @@
 
 import 'dart:io';
 
-const targets = [
-  'x86_64-unknown-linux-gnu',
-  'aarch64-unknown-linux-gnu',
-  'armv7-unknown-linux-gnueabihf',
-  'riscv64gc-unknown-linux-gnu',
-  'x86_64-apple-darwin',
-  'aarch64-apple-darwin',
-  'aarch64-apple-ios',
-  'x86_64-apple-ios',
-  'x86_64-pc-windows-msvc',
-  'aarch64-pc-windows-msvc',
-  'aarch64-linux-android',
-  'armv7-linux-androideabi',
-  'x86_64-linux-android',
-  'i686-linux-android',
-];
+import 'package:args/args.dart';
+import 'package:sigstore/src/hook_helpers/builder.dart';
 
 void main(List<String> args) async {
+  final parser = ArgParser()
+    ..addOption(
+      'os',
+      abbr: 'o',
+      allowed: ['linux', 'macos', 'windows', 'all', 'auto'],
+      defaultsTo: 'auto',
+      help: 'Target OS family to build for.',
+    )
+    ..addOption(
+      'compile-type',
+      abbr: 'c',
+      allowed: ['dynamic', 'static', 'both'],
+      defaultsTo: 'both',
+      help: 'Library type to produce.',
+    )
+    ..addOption(
+      'target',
+      abbr: 't',
+      help: 'Specific target triple to build.',
+    )
+    ..addOption(
+      'out-dir',
+      abbr: 'd',
+      defaultsTo: 'bin',
+      help: 'Output directory for built binaries.',
+    );
+
+  ArgResults results;
+  try {
+    results = parser.parse(args);
+  } catch (e) {
+    stderr.writeln('Error parsing arguments: $e\n');
+    stderr.writeln(parser.usage);
+    exit(1);
+  }
+
   final packageRoot = Platform.script.resolve('../');
-  final rustDir = packageRoot.resolve('rust/');
-  final outDir = Directory.fromUri(packageRoot.resolve('build/binaries/'));
+  final rustDir = Directory.fromUri(packageRoot.resolve('rust/'));
+  final outDir = Directory.fromUri(
+    packageRoot.resolve('${results['out-dir']}/'),
+  );
   await outDir.create(recursive: true);
 
-  print('Precompiling binaries for release...');
-
-  for (final target in targets) {
-    for (final isStatic in [false, true]) {
-      final crateType = isStatic ? 'staticlib' : 'cdylib';
-      final libType = isStatic ? 'static' : 'dynamic';
-      print('Building target $target ($crateType)...');
-
-      final outFile = outDir.uri.resolve('libsigstore_ffi-$libType-$target');
-      final result = await Process.run(
-        'cargo',
-        [
-          'rustc',
-          '--crate-type=$crateType',
-          '--release',
-          '--target=$target',
-          '--',
-          '--emit',
-          'link=${outFile.toFilePath(windows: Platform.isWindows)}',
-        ],
-        workingDirectory: rustDir.toFilePath(),
-      );
-
-      if (result.exitCode != 0) {
-        print(
-          'Warning: Build for $target failed '
-          '(target toolchain might not be installed): ${result.stderr}',
-        );
+  final List<String> targetsToBuild;
+  if (results['target'] != null) {
+    targetsToBuild = [results['target'] as String];
+  } else {
+    var os = results['os'] as String;
+    if (os == 'auto') {
+      if (Platform.isLinux) {
+        os = 'linux';
+      } else if (Platform.isMacOS) {
+        os = 'macos';
+      } else if (Platform.isWindows) {
+        os = 'windows';
       } else {
-        print('Successfully precompiled $outFile');
+        os = 'all';
+      }
+    }
+
+    targetsToBuild = switch (os) {
+      'linux' => linuxTargets,
+      'macos' => macosTargets,
+      'windows' => windowsTargets,
+      'all' => allTargets,
+      _ => linuxTargets,
+    };
+  }
+
+  final compileType = results['compile-type'] as String;
+  final staticModes = switch (compileType) {
+    'dynamic' => [false],
+    'static' => [true],
+    _ => [false, true],
+  };
+
+  print(
+    '==> Precompiling Sigstore binaries for '
+    '${targetsToBuild.length} targets...',
+  );
+
+  for (final target in targetsToBuild) {
+    for (final isStatic in staticModes) {
+      final libType = isStatic ? 'static' : 'dynamic';
+      final outFileName = 'libsigstore_ffi-$libType-$target';
+      final outFile = File('${outDir.path}/$outFileName');
+
+      try {
+        await buildRustLibrary(
+          rustDir: rustDir,
+          target: target,
+          isStatic: isStatic,
+          outputPath: outFile.path,
+        );
+        print('Successfully built $outFileName');
+      } catch (e) {
+        stderr.writeln('Warning: Build for $target ($libType) failed: $e');
       }
     }
   }
+
+  print('==> Precompilation complete. Output at ${outDir.path}');
 }

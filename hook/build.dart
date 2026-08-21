@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:code_assets/code_assets.dart';
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:hooks/hooks.dart';
+import 'package:sigstore/src/hook_helpers/builder.dart';
 import 'package:sigstore/src/hook_helpers/hashes.dart' show fileHashes, version;
 
 void main(List<String> args) async {
@@ -112,7 +113,7 @@ final class FetchMode extends BuildMode {
 
   @override
   Future<Uri> build() async {
-    final rustTarget = _asRustTarget(input.config.code);
+    final rustTarget = asRustTarget(input.config.code);
     final libraryType = input.config.buildStatic ? 'static' : 'dynamic';
     final dylibRemoteUri = Uri.parse(
       'https://github.com/mosuem/sigstore/releases/'
@@ -186,32 +187,17 @@ final class CheckoutMode extends BuildMode {
         ? input.packageRoot.resolveUri(checkoutPath!)
         : input.packageRoot.resolve('rust/');
 
-    final manifestUri = effectiveCheckout.resolve('Cargo.toml');
-    if (!File.fromUri(manifestUri).existsSync()) {
-      throw ArgumentError(
-        'The Cargo.toml file could not be found at $manifestUri',
-      );
-    }
-
     final out = input.outputDirectory.resolve(
       input.config.filename('sigstore_ffi'),
     );
-    final rustTarget = _asRustTarget(input.config.code);
+    final rustTarget = asRustTarget(input.config.code);
     final buildStatic = input.config.buildStatic;
-    final workingDirectory = Directory.fromUri(effectiveCheckout);
 
-    await runProcess(
-      'cargo',
-      [
-        'rustc',
-        '--crate-type=${buildStatic ? 'staticlib' : 'cdylib'}',
-        '--release',
-        '--target=$rustTarget',
-        '--',
-        '--emit',
-        'link=${out.toFilePath(windows: Platform.isWindows)}',
-      ],
-      workingDirectory: workingDirectory,
+    await buildRustLibrary(
+      rustDir: Directory.fromUri(effectiveCheckout),
+      target: rustTarget,
+      isStatic: buildStatic,
+      outputPath: out.toFilePath(windows: Platform.isWindows),
     );
 
     return out;
@@ -229,61 +215,10 @@ final class CheckoutMode extends BuildMode {
   }
 }
 
-String _asRustTarget(CodeConfig code) {
-  if (code.targetOS == OS.iOS &&
-      code.targetArchitecture == Architecture.arm64 &&
-      code.iOS.targetSdk == IOSSdk.iPhoneSimulator) {
-    return 'aarch64-apple-ios-sim';
-  }
-  return switch ((code.targetOS, code.targetArchitecture)) {
-    (OS.android, Architecture.arm) => 'armv7-linux-androideabi',
-    (OS.android, Architecture.arm64) => 'aarch64-linux-android',
-    (OS.android, Architecture.ia32) => 'i686-linux-android',
-    (OS.android, Architecture.riscv64) => 'riscv64-linux-android',
-    (OS.android, Architecture.x64) => 'x86_64-linux-android',
-    (OS.fuchsia, Architecture.arm64) => 'aarch64-unknown-fuchsia',
-    (OS.fuchsia, Architecture.x64) => 'x86_64-unknown-fuchsia',
-    (OS.iOS, Architecture.arm64) => 'aarch64-apple-ios',
-    (OS.iOS, Architecture.x64) => 'x86_64-apple-ios',
-    (OS.linux, Architecture.arm) => 'armv7-unknown-linux-gnueabihf',
-    (OS.linux, Architecture.arm64) => 'aarch64-unknown-linux-gnu',
-    (OS.linux, Architecture.ia32) => 'i686-unknown-linux-gnu',
-    (OS.linux, Architecture.riscv32) => 'riscv32gc-unknown-linux-gnu',
-    (OS.linux, Architecture.riscv64) => 'riscv64gc-unknown-linux-gnu',
-    (OS.linux, Architecture.x64) => 'x86_64-unknown-linux-gnu',
-    (OS.macOS, Architecture.arm64) => 'aarch64-apple-darwin',
-    (OS.macOS, Architecture.x64) => 'x86_64-apple-darwin',
-    (OS.windows, Architecture.arm64) => 'aarch64-pc-windows-msvc',
-    (OS.windows, Architecture.ia32) => 'i686-pc-windows-msvc',
-    (OS.windows, Architecture.x64) => 'x86_64-pc-windows-msvc',
-    (_, _) => throw UnimplementedError('Target $code not available for rust'),
-  };
-}
-
 extension on BuildConfig {
   bool get buildStatic => code.linkModePreference == LinkModePreference.static;
 
   String Function(String) get filename => buildStatic
       ? code.targetOS.staticlibFileName
       : code.targetOS.dylibFileName;
-}
-
-Future<void> runProcess(
-  String executable,
-  List<String> arguments, {
-  Directory? workingDirectory,
-}) async {
-  final processResult = await Process.run(
-    executable,
-    arguments,
-    workingDirectory: workingDirectory?.path,
-  );
-  if (processResult.exitCode != 0) {
-    throw ProcessException(
-      executable,
-      arguments,
-      'stdout:\n${processResult.stdout}\nstderr:\n${processResult.stderr}',
-      processResult.exitCode,
-    );
-  }
 }

@@ -30,6 +30,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
+      - name: Setup Dart SDK
+        uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+        with:
+          sdk: 'stable'
+
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
         with:
@@ -71,89 +76,13 @@ jobs:
           linker = "$LLVM_BIN/x86_64-linux-android30-clang"
           EOCONFIG
 
-      - name: Build Linux & Android Binaries
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          mkdir -p bin
-          CRATE_TYPE="${{ matrix.compiletype == 'static' && 'staticlib' || 'cdylib' }}"
-          LIB_TYPE="${{ matrix.compiletype }}"
-          
-          TARGETS=(
-            "x86_64-unknown-linux-gnu"
-            "aarch64-unknown-linux-gnu"
-            "armv7-unknown-linux-gnueabihf"
-            "riscv64gc-unknown-linux-gnu"
-            "aarch64-linux-android"
-            "armv7-linux-androideabi"
-            "x86_64-linux-android"
-            "i686-linux-android"
-          )
-          
-          for target in "${TARGETS[@]}"; do
-            echo "==> Building $target ($CRATE_TYPE)..."
-            rustup target add "$target"
-            cargo rustc \
-              --manifest-path rust/Cargo.toml \
-              --crate-type="$CRATE_TYPE" \
-              --release \
-              --target="$target" \
-              -- \
-              --emit link="$(pwd)/bin/libsigstore_ffi-$LIB_TYPE-$target"
-          done
+      - name: Precompile Binaries
+        run: dart run tool/precompile_binaries.dart --compile-type=${{ matrix.compiletype }} --out-dir=bin
 
-      - name: Build macOS & iOS Binaries
-        if: matrix.os == 'macos-latest'
-        run: |
-          mkdir -p bin
-          CRATE_TYPE="${{ matrix.compiletype == 'static' && 'staticlib' || 'cdylib' }}"
-          LIB_TYPE="${{ matrix.compiletype }}"
-          
-          TARGETS=(
-            "aarch64-apple-darwin"
-            "x86_64-apple-darwin"
-            "aarch64-apple-ios"
-            "x86_64-apple-ios"
-          )
-          
-          for target in "${TARGETS[@]}"; do
-            echo "==> Building $target ($CRATE_TYPE)..."
-            rustup target add "$target"
-            cargo rustc \
-              --manifest-path rust/Cargo.toml \
-              --crate-type="$CRATE_TYPE" \
-              --release \
-              --target="$target" \
-              -- \
-              --emit link="$(pwd)/bin/libsigstore_ffi-$LIB_TYPE-$target"
-          done
-
-      - name: Build Windows Binaries
+      - name: Clean Windows Auxiliary Files
         if: matrix.os == 'windows-latest'
         shell: bash
-        run: |
-          mkdir -p bin
-          CRATE_TYPE="${{ matrix.compiletype == 'static' && 'staticlib' || 'cdylib' }}"
-          LIB_TYPE="${{ matrix.compiletype }}"
-          
-          TARGETS=(
-            "x86_64-pc-windows-msvc"
-            "aarch64-pc-windows-msvc"
-          )
-          
-          for target in "${TARGETS[@]}"; do
-            echo "==> Building $target ($CRATE_TYPE)..."
-            rustup target add "$target"
-            cargo rustc \
-              --manifest-path rust/Cargo.toml \
-              --crate-type="$CRATE_TYPE" \
-              --release \
-              --target="$target" \
-              -- \
-              --emit link="$(pwd)/bin/libsigstore_ffi-$LIB_TYPE-$target"
-          done
-          
-          # Remove auxiliary Windows build artifacts
-          rm -f bin/*.exp bin/*.lib bin/*.pdb
+        run: rm -f bin/*.exp bin/*.lib bin/*.pdb
 
       - name: Upload Binary Artifacts
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
