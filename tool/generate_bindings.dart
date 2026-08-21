@@ -12,9 +12,12 @@ void main() async {
   final rustLib = packageRoot.resolve('rust/src/lib.rs');
   final outBindings = packageRoot.resolve('lib/src/bindings/');
 
-  final process = await Process.run(
-    'cargo',
-    [
+  final diplomatCargoFile = File.fromUri(diplomatCargo);
+  final List<String> cmd;
+  final String executable;
+  if (diplomatCargoFile.existsSync()) {
+    executable = 'cargo';
+    cmd = [
       'run',
       '--manifest-path',
       diplomatCargo.toFilePath(),
@@ -25,7 +28,20 @@ void main() async {
       outBindings.toFilePath(),
       '-e',
       rustLib.toFilePath(),
-    ],
+    ];
+  } else {
+    executable = 'diplomat-tool';
+    cmd = [
+      'dart',
+      outBindings.toFilePath(),
+      '-e',
+      rustLib.toFilePath(),
+    ];
+  }
+
+  final process = await Process.run(
+    executable,
+    cmd,
     workingDirectory: packageRoot.toFilePath(),
   );
 

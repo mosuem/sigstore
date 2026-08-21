@@ -1,0 +1,225 @@
+name: Release Binaries
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to attach binaries to (e.g. v0.1.0-alpha.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-binaries:
+    name: Build (${{ matrix.os }}, ${{ matrix.compiletype }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        compiletype: [dynamic, static]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
+        with:
+          toolchain: stable
+
+      - name: Setup Linux Cross-Compilers & Linkers
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf gcc-riscv64-linux-gnu gcc-i686-linux-gnu
+          
+          NDK_DIR="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-$ANDROID_NDK}}"
+          LLVM_BIN="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          
+          mkdir -p .cargo
+          cat << EOCONFIG >> .cargo/config.toml
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+
+          [target.armv7-unknown-linux-gnueabihf]
+          linker = "arm-linux-gnueabihf-gcc"
+
+          [target.riscv64gc-unknown-linux-gnu]
+          linker = "riscv64-linux-gnu-gcc"
+
+          [target.i686-unknown-linux-gnu]
+          linker = "i686-linux-gnu-gcc"
+
+          [target.aarch64-linux-android]
+          linker = "$LLVM_BIN/aarch64-linux-android30-clang"
+
+          [target.armv7-linux-androideabi]
+          linker = "$LLVM_BIN/armv7a-linux-androideabi30-clang"
+
+          [target.i686-linux-android]
+          linker = "$LLVM_BIN/i686-linux-android30-clang"
+
+          [target.x86_64-linux-android]
+          linker = "$LLVM_BIN/x86_64-linux-android30-clang"
+          EOCONFIG
+
+      - name: Build Linux & Android Binaries
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p bin
+          CRATE_TYPE="${{ matrix.compiletype == 'static' && 'staticlib' || 'cdylib' }}"
+          LIB_TYPE="${{ matrix.compiletype }}"
+          
+          TARGETS=(
+            "x86_64-unknown-linux-gnu"
+            "aarch64-unknown-linux-gnu"
+            "armv7-unknown-linux-gnueabihf"
+            "riscv64gc-unknown-linux-gnu"
+            "aarch64-linux-android"
+            "armv7-linux-androideabi"
+            "x86_64-linux-android"
+            "i686-linux-android"
+          )
+          
+          for target in "${TARGETS[@]}"; do
+            echo "==> Building $target ($CRATE_TYPE)..."
+            rustup target add "$target"
+            cargo rustc \
+              --manifest-path rust/Cargo.toml \
+              --crate-type="$CRATE_TYPE" \
+              --release \
+              --target="$target" \
+              -- \
+              --emit link="$(pwd)/bin/libsigstore_ffi-$LIB_TYPE-$target"
+          done
+
+      - name: Build macOS & iOS Binaries
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir -p bin
+          CRATE_TYPE="${{ matrix.compiletype == 'static' && 'staticlib' || 'cdylib' }}"
+          LIB_TYPE="${{ matrix.compiletype }}"
+          
+          TARGETS=(
+            "aarch64-apple-darwin"
+            "x86_64-apple-darwin"
+            "aarch64-apple-ios"
+            "x86_64-apple-ios"
+          )
+          
+          for target in "${TARGETS[@]}"; do
+            echo "==> Building $target ($CRATE_TYPE)..."
+            rustup target add "$target"
+            cargo rustc \
+              --manifest-path rust/Cargo.toml \
+              --crate-type="$CRATE_TYPE" \
+              --release \
+              --target="$target" \
+              -- \
+              --emit link="$(pwd)/bin/libsigstore_ffi-$LIB_TYPE-$target"
+          done
+
+      - name: Build Windows Binaries
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p bin
+          CRATE_TYPE="${{ matrix.compiletype == 'static' && 'staticlib' || 'cdylib' }}"
+          LIB_TYPE="${{ matrix.compiletype }}"
+          
+          TARGETS=(
+            "x86_64-pc-windows-msvc"
+            "aarch64-pc-windows-msvc"
+          )
+          
+          for target in "${TARGETS[@]}"; do
+            echo "==> Building $target ($CRATE_TYPE)..."
+            rustup target add "$target"
+            cargo rustc \
+              --manifest-path rust/Cargo.toml \
+              --crate-type="$CRATE_TYPE" \
+              --release \
+              --target="$target" \
+              -- \
+              --emit link="$(pwd)/bin/libsigstore_ffi-$LIB_TYPE-$target"
+          done
+          
+          # Remove auxiliary Windows build artifacts
+          rm -f bin/*.exp bin/*.lib bin/*.pdb
+
+      - name: Upload Binary Artifacts
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: binaries-${{ matrix.os }}-${{ matrix.compiletype }}
+          path: bin/*
+
+  upload-release-assets:
+    name: Upload Binaries to GitHub Release
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Dart SDK
+        uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+        with:
+          sdk: 'stable'
+
+      - name: Download Built Binaries
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          path: bin_artifacts
+          merge-multiple: true
+
+      - name: Prepare Release Directory & Checksums
+        run: |
+          mkdir -p release_bin
+          cp bin_artifacts/* release_bin/
+          
+          echo "==> Computing SHA-256 Checksums..."
+          cd release_bin
+          sha256sum libsigstore_ffi-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload Binaries to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          echo "==> Ensuring release for $TAG exists..."
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Creating release $TAG..."
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes "Automated release of precompiled Sigstore FFI native binaries for fetch mode."
+          fi
+          
+          echo "==> Uploading binary assets to release $TAG..."
+          find release_bin -type f -exec gh release upload "$TAG" --clobber {} +
+
+      - name: Generate Dart Hashes Table
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          echo "### Generated File Hashes for $TAG" >> $GITHUB_STEP_SUMMARY
+          echo '```dart' >> $GITHUB_STEP_SUMMARY
+          echo "const version = '$TAG';" >> $GITHUB_STEP_SUMMARY
+          echo "const fileHashes = <(String, String), String>{" >> $GITHUB_STEP_SUMMARY
+          while IFS=' ' read -r hash filename; do
+            if [[ "$filename" =~ libsigstore_ffi-(dynamic|static)-(.+) ]]; then
+              libtype="${BASH_REMATCH[1]}"
+              target="${BASH_REMATCH[2]}"
+              echo "  ('$target', '$libtype'): '$hash'," >> $GITHUB_STEP_SUMMARY
+            fi
+          done < release_bin/SHA256SUMS.txt
+          echo "};" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

@@ -113,7 +113,7 @@ final class FetchMode extends BuildMode {
     final rustTarget = _asRustTarget(input.config.code);
     final libraryType = input.config.buildStatic ? 'static' : 'dynamic';
     final dylibRemoteUri = Uri.parse(
-      'https://github.com/dart-lang/sigstore-dart/releases/'
+      'https://github.com/mosuem/sigstore/releases/'
       'download/$version/libsigstore_ffi-$libraryType-$rustTarget',
     );
     final request = await httpClient.getUrl(dylibRemoteUri);

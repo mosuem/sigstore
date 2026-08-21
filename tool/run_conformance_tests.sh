@@ -31,6 +31,15 @@ if [ ! -d "$CONFORMANCE_DIR" ]; then
   git clone --depth 1 https://github.com/sigstore/sigstore-conformance.git "$CONFORMANCE_DIR"
 fi
 
+if ! python3 -c "import platformdirs" &> /dev/null; then
+  echo "Installing sigstore-conformance Python requirements..."
+  if [ -f "$CONFORMANCE_DIR/requirements.in" ]; then
+    python3 -m pip install -q -r "$CONFORMANCE_DIR/requirements.in"
+  else
+    python3 -m pip install -q "$CONFORMANCE_DIR"
+  fi
+fi
+
 PYTEST_CMD=""
 if command -v pytest &> /dev/null; then
   PYTEST_CMD="pytest"

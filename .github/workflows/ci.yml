@@ -19,7 +19,7 @@ jobs:
       - name: Setup Dart SDK
         uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
         with:
-          sdk: 'stable'
+          sdk: stable
 
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master
@@ -71,7 +71,7 @@ jobs:
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest
+          pip install pytest platformdirs
 
       - name: Run Conformance Test Suite
         run: ./tool/run_conformance_tests.sh

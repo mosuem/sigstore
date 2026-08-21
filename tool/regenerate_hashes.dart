@@ -33,7 +33,7 @@ Future<void> main(List<String> args) async {
   ]) {
     for (final libraryType in ['dynamic', 'static']) {
       final uri = Uri.parse(
-        'https://github.com/dart-lang/sigstore-dart/releases/'
+        'https://github.com/mosuem/sigstore/releases/'
         'download/$version/libsigstore_ffi-$libraryType-$rustTarget',
       );
       print('Fetching from $uri');
