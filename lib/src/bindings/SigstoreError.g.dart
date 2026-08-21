@@ -9,12 +9,6 @@ enum SigstoreError {
   // ignore: public_member_api_docs
   verificationFailed,
   // ignore: public_member_api_docs
-  signingFailed,
-  // ignore: public_member_api_docs
-  oidcError,
-  // ignore: public_member_api_docs
-  networkError,
-  // ignore: public_member_api_docs
   internalError;
 
 }

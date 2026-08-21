@@ -8,9 +8,6 @@ pub mod ffi {
     pub enum SigstoreError {
         InvalidBundle,
         VerificationFailed,
-        SigningFailed,
-        OidcError,
-        NetworkError,
         InternalError,
     }
 
@@ -218,15 +215,6 @@ pub mod ffi {
                 issuer: res.issuer.unwrap_or_default(),
             }))
         }
-
-        /// Sign an artifact with an OIDC identity token (keyless signing).
-        pub fn sign(
-            &self,
-            _artifact_bytes: &[u8],
-            _identity_token: &DiplomatStr,
-        ) -> Result<Box<SigstoreBundle>, SigstoreError> {
-            Err(SigstoreError::SigningFailed)
-        }
     }
 
     impl SigstoreVerificationResult {
@@ -252,12 +240,6 @@ pub enum Error {
     InvalidBundle,
     #[error("Verification failed")]
     VerificationFailed,
-    #[error("Signing failed")]
-    SigningFailed,
-    #[error("OIDC error")]
-    OidcError,
-    #[error("Network error")]
-    NetworkError,
     #[error("Internal error")]
     InternalError,
 }

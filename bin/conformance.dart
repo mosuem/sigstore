@@ -145,51 +145,10 @@ Future<void> _handleVerifyBundle(List<String> args) async {
 }
 
 Future<void> _handleSignBundle(List<String> args) async {
-  final parser = ArgParser(allowTrailingOptions: true)
-    ..addOption('identity-token', mandatory: true)
-    ..addOption('bundle', mandatory: true)
-    ..addOption('trusted-root', mandatory: false)
-    ..addOption('signing-config', mandatory: false)
-    ..addFlag('staging', defaultsTo: false)
-    ..addFlag('in-toto', defaultsTo: false);
-
-  ArgResults results;
-  try {
-    results = parser.parse(args);
-  } catch (e) {
-    stderr.writeln('Error parsing arguments: $e');
-    exit(1);
-  }
-
-  if (results.rest.isEmpty) {
-    stderr.writeln('Error: Missing artifact argument');
-    exit(1);
-  }
-
-  final artifactArg = results.rest.first;
-  final idToken = results['identity-token'] as String;
-  final bundleOutPath = _resolvePath(results['bundle'] as String);
-
-  List<int> artifactBytes;
-  final resolvedArtifact = _resolvePath(artifactArg);
-  final artifactFile = File(resolvedArtifact);
-  if (artifactFile.existsSync()) {
-    artifactBytes = await artifactFile.readAsBytes();
-  } else {
-    artifactBytes = utf8.encode(artifactArg);
-  }
-
-  try {
-    final client = SigstoreClient.create();
-    final bundle = client.sign(artifactBytes, idToken);
-    final bundleJson = bundle.toJson();
-    await File(bundleOutPath).writeAsString(bundleJson);
-    print('OK: Signed bundle saved to $bundleOutPath');
-    exit(0);
-  } catch (e) {
-    stderr.writeln('FAIL: Signing error: $e');
-    exit(1);
-  }
+  stderr.writeln(
+    'FAIL: Keyless signing is not supported by this verification-only client.',
+  );
+  exit(1);
 }
 
 List<int> _hexToBytes(String hex) {

@@ -45,18 +45,6 @@ final class SigstoreClient implements ffi.Finalizable {
     return SigstoreVerificationResult._fromFfi(result.union.ok, []);
   }
 
-  /// Sign an artifact with an OIDC identity token (keyless signing).
-  ///
-  /// Throws [SigstoreError] on failure.
-  SigstoreBundle sign(core.List<int> artifactBytes, String identityToken) {
-    final temp = _FinalizedArena();
-    final result = _sigstore_SigstoreClient_sign_mv1(_ffi, artifactBytes._uint8AllocIn(temp.arena), identityToken._utf8AllocIn(temp.arena));
-    if (!result.isOk) {
-      throw SigstoreError.values[result.union.err];
-    }
-    return SigstoreBundle._fromFfi(result.union.ok, []);
-  }
-
 }
 
 // ignore: experimental_member_use
@@ -76,11 +64,5 @@ external ffi.Pointer<ffi.Opaque> _sigstore_SigstoreClient_create_mv1();
 @ffi.Native<_ResultOpaqueInt32 Function(ffi.Pointer<ffi.Opaque>, _SliceUint8, ffi.Bool, ffi.Pointer<ffi.Opaque>, ffi.Pointer<ffi.Opaque>)>(isLeaf: true, symbol: 'sigstore_SigstoreClient_verify_mv1')
 // ignore: non_constant_identifier_names
 external _ResultOpaqueInt32 _sigstore_SigstoreClient_verify_mv1(ffi.Pointer<ffi.Opaque> self, _SliceUint8 artifactBytes, bool isDigest, ffi.Pointer<ffi.Opaque> bundle, ffi.Pointer<ffi.Opaque> policy);
-
-// ignore: experimental_member_use
-@meta.RecordUse()
-@ffi.Native<_ResultOpaqueInt32 Function(ffi.Pointer<ffi.Opaque>, _SliceUint8, _SliceUtf8)>(isLeaf: true, symbol: 'sigstore_SigstoreClient_sign_mv1')
-// ignore: non_constant_identifier_names
-external _ResultOpaqueInt32 _sigstore_SigstoreClient_sign_mv1(ffi.Pointer<ffi.Opaque> self, _SliceUint8 artifactBytes, _SliceUtf8 identityToken);
 
 // dart format on

@@ -1,53 +1,76 @@
 # Sigstore Dart Client (`package:sigstore`)
 
-A Dart client library for [Sigstore](https://www.sigstore.dev/) wrapping `sigstore-rust` (`sigstore-verify`, `sigstore-sign`, `sigstore-types`) using **[Diplomat](https://github.com/rust-diplomat/diplomat)** for FFI bindings generation and Dart **Native Assets** (`hook/build.dart`).
+A Dart client library for [Sigstore](https://www.sigstore.dev/) focused on **cryptographic bundle inspection and artifact verification**. It wraps the official [`sigstore-rs`](https://github.com/sigstore/sigstore-rs) verification crates (`sigstore-verify`, `sigstore-trust-root`, `sigstore-types`) using **[Diplomat](https://github.com/rust-diplomat/diplomat)** for FFI code generation and Dart **Native Assets** (`hook/build.dart`).
 
-## Architecture & Features
+> [!NOTE]
+> **Scope**: This package is **verification-only**. It verifies artifacts and software supply chain signatures against Sigstore bundles (including Fulcio X.509 certificates, Rekor transparency logs, RFC 3161 timestamps, and custom/production/staging trusted roots). Keyless signing (which requires interactive OIDC authorization and CA submission) is not part of this package.
 
-- **Automated Bindings**: The Rust bridge in `rust/src/lib.rs` is annotated with `#[diplomat::bridge]`. All `@Native` FFI declarations and idiomatic Dart classes in `lib/src/bindings/` are generated via `dart run tool/generate_bindings.dart`.
-- **Flexible Build Modes** (following `package:icu4x`):
-  - `fetch` (default for consumers): Fetches precompiled dynamic libraries and verifies their SHA-256 hashes against `lib/src/hook_helpers/hashes.dart`.
-  - `checkout`: Builds fresh native binaries from the local `rust/` source crate using `cargo`.
+## Features
+
+- **100% Upstream Verification Conformance**: Passes all 140 applicable bundle verification test suites from [`sigstore-conformance`](https://github.com/sigstore/sigstore-conformance).
+- **Flexible Trusted Roots**: Supports verification with the Sigstore Public Good Instance (Production), Sigstore Staging, or custom `trusted_root.json` files.
+- **Identity & Issuer Policy Verification**: Validates signer Subject Alternative Name (SAN) identities and OIDC issuers.
+- **Pre-computed Digest & Raw Byte Verification**: Verifies both raw artifact files and SHA-256 pre-computed digests (`sha256:...`).
+- **Flexible Native Asset Modes** (following `package:icu4x` conventions):
+  - `fetch` (default for package consumers): Automatically downloads precompiled native binaries from GitHub releases and verifies their SHA-256 hashes against `lib/src/hook_helpers/hashes.dart`.
+  - `checkout`: Builds fresh native binaries directly from the embedded Rust crate using `cargo`.
   - `local`: Links against an existing binary specified via `localPath`.
 
 ## Usage
 
 ```dart
-import 'dart:convert';
+import 'dart:io';
 import 'package:sigstore/sigstore.dart';
 
-void main() {
+void main() async {
+  // 1. Create client instance
   final client = SigstoreClient.create();
+
+  // 2. Load bundle and artifact
+  final bundleJson = await File('bundle.sigstore.json').readAsString();
+  final artifactBytes = await File('artifact.tar.gz').readAsBytes();
   final bundle = SigstoreBundle.fromJson(bundleJson);
 
-  final policy = SigstoreVerificationPolicy(
-    expectedIdentity: 'developer@example.com',
-    expectedIssuer: 'https://accounts.google.com',
-    offline: true,
+  // 3. Define verification policy
+  final policy = SigstoreVerificationPolicy.create(
+    'https://github.com/owner/repo/.github/workflows/release.yml@refs/heads/main', // expected identity
+    'https://token.actions.githubusercontent.com',                                  // expected issuer
+    true,   // offline verification
+    false,  // isStaging (false = production root)
+    '',     // optional custom trusted_root.json
+    '',     // optional standalone public key PEM
   );
 
-  final artifact = utf8.encode('my release artifact');
-  final result = client.verify(artifact, bundle, policy);
+  // 4. Verify artifact
+  final result = client.verify(artifactBytes, false, bundle, policy);
 
   if (result.isValid()) {
-    print('Verified: ${result.verifiedIdentity()}');
+    print('Verified signer identity: ${result.verifiedIdentity()}');
+    print('Verified OIDC issuer: ${result.verifiedIssuer()}');
   }
 }
 ```
 
-## Development & Generation
+## Development & Tooling
 
 ### Generating Dart Bindings
+Regenerates Diplomat C-ABI and Dart FFI wrappers from `rust/src/lib.rs`:
 ```bash
 dart run tool/generate_bindings.dart
 ```
 
-### Running Tests
+### Running Unit Tests
 ```bash
 dart test
 ```
 
-### Precompiling Binaries & Updating Hashes
+### Running Upstream Sigstore Conformance Tests
+Compiles the standalone conformance CLI executable and runs the upstream `sigstore-conformance` pytest suite:
+```bash
+./tool/run_conformance_tests.sh
+```
+
+### Precompiling Release Binaries & Hashes
 ```bash
 dart run tool/precompile_binaries.dart
 dart run tool/regenerate_hashes.dart <github-release-tag>
