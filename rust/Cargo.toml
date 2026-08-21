@@ -1,0 +1,16 @@
+[package]
+name = "sigstore_ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+diplomat = { path = "../../diplomat/macro" }
+diplomat-runtime = { path = "../../diplomat/runtime" }
+sigstore-verify = { version = "0.11", default-features = false, features = ["rustls"] }
+sigstore-types = "0.11"
+sigstore-trust-root = { version = "0.11", default-features = false, features = ["rustls"] }
+serde_json = "1.0"
+thiserror = "2.0"
