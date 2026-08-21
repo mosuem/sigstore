@@ -3,7 +3,7 @@ description: >
   Dart bindings for Sigstore wrapping sigstore-rust for keyless signing,
   bundle inspection, and artifact verification.
 version: 0.1.0-alpha.1
-repository: https://github.com/dart-lang/sigstore-dart
+repository: https://github.com/mosuem/sigstore
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
