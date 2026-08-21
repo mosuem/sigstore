@@ -1,0 +1,5 @@
+# Ensure LF line endings are preserved
+* text=auto eol=lf
+
+# Test fixtures must be treated as binary to prevent CRLF alterations on Windows
+test/fixtures/** -text

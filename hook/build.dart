@@ -80,10 +80,12 @@ class BuildOptions {
   BuildOptions({required this.buildMode, this.localPath, this.checkoutPath});
 
   factory BuildOptions.fromDefines(HookInputUserDefines defines) {
+    final modeName =
+        Platform.environment['SIGSTORE_BUILD_MODE'] ?? defines['buildMode'];
     return BuildOptions(
       buildMode: BuildModeEnum.values.firstWhere(
-        (element) => element.name == defines['buildMode'],
-        orElse: () => BuildModeEnum.checkout,
+        (element) => element.name == modeName,
+        orElse: () => BuildModeEnum.fetch,
       ),
       localPath: defines.path('localPath'),
       checkoutPath: defines.path('checkoutPath'),
