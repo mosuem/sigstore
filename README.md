@@ -75,3 +75,49 @@ Compiles the standalone conformance CLI executable and runs the upstream `sigsto
 dart run tool/precompile_binaries.dart
 dart run tool/regenerate_hashes.dart <github-release-tag>
 ```
+
+## Releasing & Updating the Library
+
+Because this package ships precompiled native binaries for multiple platforms in `fetch` mode, releases follow a simple 4-step workflow to ensure binary hashes are calculated and committed before publishing to `pub.dev`.
+
+### 1. Update Code & Regenerate Bindings (if Rust changed)
+If modifying Rust code in `rust/src/`:
+```bash
+dart run tool/generate_bindings.dart
+dart test
+./tool/run_conformance_tests.sh
+```
+
+### 2. Bump Version & Build Precompiled Binaries
+1. Update `version` in `pubspec.yaml` and document changes in `CHANGELOG.md` (e.g., `0.2.0`).
+2. Trigger the GitHub Actions binary build for `binaries-v<version>`:
+   ```bash
+   gh workflow run release-binaries.yml -f tag=binaries-v0.2.0
+   ```
+   *(Or trigger manually in GitHub under **Actions &rarr; Release Binaries &rarr; Run workflow**)*
+3. Wait for the workflow to finish building across Linux, macOS, and Windows runners and attaching assets to the `binaries-v0.2.0` GitHub Release.
+
+### 3. Regenerate Hashes & Open PR
+1. Run the hash generator to download the newly built binaries and populate `lib/src/hook_helpers/hashes.dart`:
+   ```bash
+   dart run tool/regenerate_hashes.dart binaries-v0.2.0
+   ```
+2. Commit your changes to a feature branch and open a PR:
+   ```bash
+   git checkout -b release-v0.2.0
+   git add pubspec.yaml CHANGELOG.md lib/src/hook_helpers/hashes.dart
+   git commit -m "chore: prepare for 0.2.0 release"
+   git push -u origin release-v0.2.0
+   gh pr create --title "Release v0.2.0" --body "Prepare release 0.2.0"
+   ```
+3. CI will verify the checks, including downloading and testing the precompiled binaries across Linux, macOS, and Windows. The `dart-lang/ecosystem` publish bot will validate the package and comment that it is `ready to publish`.
+
+### 4. Merge & Publish to pub.dev
+1. Merge the PR into `main`.
+2. Tag the release commit and push the tag:
+   ```bash
+   git checkout main && git pull origin main
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+3. The `.github/workflows/publish.yaml` workflow will automatically authenticate with `pub.dev` via OIDC and publish the package.
