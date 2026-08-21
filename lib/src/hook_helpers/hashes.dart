@@ -9,8 +9,19 @@
 //    dart tool/regenerate_hashes.dart <github tag>
 //
 
-const version = '0.1.0-alpha.1';
+const version = 'v0.1.0';
 
 const fileHashes = <(String, String), String>{
-  // Precompiled binary hashes for release download validation
+  ('x86_64-unknown-linux-gnu', 'dynamic'):
+      '12b8f7e5583320e1d822d8408fa68bc925f92e374da398f93703752506b74c40',
+  ('x86_64-unknown-linux-gnu', 'static'):
+      '26a66564f25d5e856691c6e25773c7cb3ddd09c133fe476d8a7fdb4fb86c6142',
+  ('aarch64-apple-darwin', 'dynamic'):
+      'fef15472df19158fb653f195686f982eff0f547edc8ada4ecb0d3a5199a6b4f3',
+  ('aarch64-apple-darwin', 'static'):
+      '8e4aa72b2a07bc2aff409e4ac952de941c5134f5e509cc4c1c0971c8b94c3a8b',
+  ('x86_64-pc-windows-msvc', 'dynamic'):
+      '5429dba5eef38c9bf5bbed8dae423ffc7078e6c4ed4e9404f046b23f5dbd9765',
+  ('x86_64-pc-windows-msvc', 'static'):
+      '8e92af5af5550a54992f78d8f6a710620ad8c444d819146a4b248e2127353b93',
 };
