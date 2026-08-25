@@ -9,19 +9,19 @@
 //    dart tool/regenerate_hashes.dart <github tag>
 //
 
-const version = 'binaries-v0.1.0';
+const version = 'binaries-v0.1.1';
 
 const fileHashes = <(String, String), String>{
   ('x86_64-unknown-linux-gnu', 'dynamic'):
-      '12b8f7e5583320e1d822d8408fa68bc925f92e374da398f93703752506b74c40',
+      'c472f1c29cbae190b8de971aa84831cadc7cb50fdb2eb2a94cffe5606853ffed',
   ('x86_64-unknown-linux-gnu', 'static'):
-      '26a66564f25d5e856691c6e25773c7cb3ddd09c133fe476d8a7fdb4fb86c6142',
+      '5c51372e43027567a576eb3e6fbcad265279c0b525b548fd166c6a1e74e99cef',
   ('aarch64-apple-darwin', 'dynamic'):
-      'fef15472df19158fb653f195686f982eff0f547edc8ada4ecb0d3a5199a6b4f3',
+      '96e9e7e804766dca4d43b60ea074b05e190badc34fd7feb8a733100696117724',
   ('aarch64-apple-darwin', 'static'):
-      '8e4aa72b2a07bc2aff409e4ac952de941c5134f5e509cc4c1c0971c8b94c3a8b',
+      '8c64a58cea707e6ebd18d16e5b159e69cb644c80ca0f723b68f72afbcc3505b1',
   ('x86_64-pc-windows-msvc', 'dynamic'):
-      '5429dba5eef38c9bf5bbed8dae423ffc7078e6c4ed4e9404f046b23f5dbd9765',
+      '2ff1733beb1ff1fa20cfa82b0480b80e53a3d5b02a051e46b259de038f5ce463',
   ('x86_64-pc-windows-msvc', 'static'):
-      '8e92af5af5550a54992f78d8f6a710620ad8c444d819146a4b248e2127353b93',
+      'f3d1bc4992e1f42cdbba699ad67928513440a9668baecb29ec20d6a3865dc0b5',
 };
