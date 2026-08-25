@@ -75,5 +75,24 @@ void main() {
         equals('https://token.actions.githubusercontent.com'),
       );
     });
+
+    test('refreshes trusted root from TUF repository', () {
+      final client = SigstoreClient.create();
+      final tempDir = Directory.systemTemp.createTempSync('tuf_test');
+      try {
+        final trustedRootJson = client.refreshTrustedRoot(
+          'https://tuf-repo-cdn.sigstore.dev',
+          tempDir.path,
+        );
+        expect(trustedRootJson, isNotEmpty);
+        final decoded = jsonDecode(trustedRootJson) as Map<String, dynamic>;
+        expect(
+          decoded['mediaType'],
+          equals('application/vnd.dev.sigstore.trustedroot+json;version=0.1'),
+        );
+      } finally {
+        tempDir.deleteSync(recursive: true);
+      }
+    });
   });
 }
