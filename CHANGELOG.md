@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Expose `SigstoreClient.refreshTrustedRoot` for updating Sigstore TUF metadata and trusted root anchors.
+
 ## 0.1.0
 
 - Initial release.
