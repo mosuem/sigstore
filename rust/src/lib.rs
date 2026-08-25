@@ -215,57 +215,6 @@ pub mod ffi {
                 issuer: res.issuer.unwrap_or_default(),
             }))
         }
-
-        /// Refresh the TUF trusted root metadata from a TUF mirror repository,
-        /// writing verified metadata to [cache_dir] and returning the verified
-        /// trusted_root.json string.
-        pub fn refresh_trusted_root(
-            &self,
-            tuf_mirror_url: &DiplomatStr,
-            initial_root_json: &DiplomatStr,
-            cache_dir: &DiplomatStr,
-            write: &mut DiplomatWrite,
-        ) -> Result<(), SigstoreError> {
-            let mirror_str =
-                std::str::from_utf8(tuf_mirror_url).map_err(|_| SigstoreError::InvalidBundle)?;
-            let default_root = include_bytes!("production_tuf_root.json");
-            let initial_root = if initial_root_json.is_empty() {
-                default_root as &[u8]
-            } else {
-                initial_root_json
-            };
-            let cache_str =
-                std::str::from_utf8(cache_dir).map_err(|_| SigstoreError::InvalidBundle)?;
-
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map_err(|_| SigstoreError::InternalError)?;
-
-            rt.block_on(async {
-                let repo = sigstore_tuf::client::HttpRepository::new(mirror_str)
-                    .map_err(|_| SigstoreError::InternalError)?;
-                let mut updater = sigstore_tuf::client::Updater::new(repo, initial_root)
-                    .map_err(|_| SigstoreError::InvalidBundle)?
-                    .with_store(sigstore_tuf::cache::FileStore::new(cache_str));
-
-                updater
-                    .refresh(jiff::Timestamp::now())
-                    .await
-                    .map_err(|_| SigstoreError::VerificationFailed)?;
-
-                let target_bytes = updater
-                    .get_target("trusted_root.json", jiff::Timestamp::now())
-                    .await
-                    .map_err(|_| SigstoreError::VerificationFailed)?;
-
-                let target_str =
-                    std::str::from_utf8(&target_bytes).map_err(|_| SigstoreError::InternalError)?;
-
-                write!(write, "{}", target_str).map_err(|_| SigstoreError::InternalError)?;
-                Ok(())
-            })
-        }
     }
 
     impl SigstoreVerificationResult {
