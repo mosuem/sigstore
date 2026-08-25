@@ -1691,11 +1691,14 @@ version = "0.1.0"
 dependencies = [
  "diplomat",
  "diplomat-runtime",
+ "jiff",
  "serde_json",
  "sigstore-trust-root",
+ "sigstore-tuf",
  "sigstore-types",
  "sigstore-verify",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
