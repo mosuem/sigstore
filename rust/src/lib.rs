@@ -215,6 +215,56 @@ pub mod ffi {
                 issuer: res.issuer.unwrap_or_default(),
             }))
         }
+
+        /// Refresh the TUF trusted root from the Sigstore TUF mirror into [cache_dir]
+        /// using full TUF verification. Returns the verified `trusted_root.json` string.
+        pub fn refresh_trusted_root(
+            &self,
+            tuf_mirror_url: &DiplomatStr,
+            cache_dir: &DiplomatStr,
+            write: &mut DiplomatWrite,
+        ) -> Result<(), SigstoreError> {
+            let mirror_str =
+                std::str::from_utf8(tuf_mirror_url).map_err(|_| SigstoreError::InvalidBundle)?;
+            let cache_str =
+                std::str::from_utf8(cache_dir).map_err(|_| SigstoreError::InvalidBundle)?;
+
+            let config =
+                if mirror_str.is_empty() || mirror_str == sigstore_trust_root::DEFAULT_TUF_URL {
+                    let mut c = sigstore_trust_root::TufConfig::production();
+                    if !cache_str.is_empty() {
+                        c = c.with_cache_dir(std::path::PathBuf::from(cache_str));
+                    }
+                    c
+                } else if mirror_str == sigstore_trust_root::STAGING_TUF_URL {
+                    let mut c = sigstore_trust_root::TufConfig::staging();
+                    if !cache_str.is_empty() {
+                        c = c.with_cache_dir(std::path::PathBuf::from(cache_str));
+                    }
+                    c
+                } else {
+                    let mut c = sigstore_trust_root::TufConfig::custom(mirror_str);
+                    if !cache_str.is_empty() {
+                        c = c.with_cache_dir(std::path::PathBuf::from(cache_str));
+                    }
+                    c
+                };
+
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|_| SigstoreError::InternalError)?;
+
+            let (trusted_root, _) = rt
+                .block_on(async { sigstore_trust_root::fetch_trust_material(config).await })
+                .map_err(|_| SigstoreError::VerificationFailed)?;
+
+            let trusted_root_str =
+                serde_json::to_string(&trusted_root).map_err(|_| SigstoreError::InternalError)?;
+
+            write!(write, "{}", trusted_root_str).map_err(|_| SigstoreError::InternalError)?;
+            Ok(())
+        }
     }
 
     impl SigstoreVerificationResult {
