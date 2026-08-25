@@ -24,4 +24,4 @@ dev_dependencies:
 hooks:
   user_defines:
     sigstore:
-      buildMode: fetch
+      buildMode: checkout
