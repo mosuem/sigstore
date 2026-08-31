@@ -2,7 +2,7 @@ name: sigstore
 description: >
   Dart bindings for Sigstore wrapping sigstore-rs for bundle inspection
   and cryptographic artifact verification.
-version: 0.1.1
+version: 0.1.2
 repository: https://github.com/mosuem/sigstore
 
 environment:
