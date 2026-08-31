@@ -3,6 +3,7 @@
 // BSD-style license that can be found in the LICENSE file.
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:sigstore/src/hook_helpers/builder.dart';
@@ -31,10 +32,9 @@ Future<void> main(List<String> args) async {
           print('Skipping: not found at $uri');
           continue;
         }
-        final bytes = await response.fold<List<int>>(
-          [],
-          (a, b) => a..addAll(b),
-        );
+        final builder = BytesBuilder(copy: false);
+        await response.forEach(builder.add);
+        final bytes = builder.takeBytes();
         final fileHash = sha256.convert(bytes).toString();
         fileHashes[(rustTarget, libraryType)] = fileHash;
         print('Target $rustTarget ($libraryType): $fileHash');

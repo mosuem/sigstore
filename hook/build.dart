@@ -3,6 +3,7 @@
 // BSD-style license that can be found in the LICENSE file.
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:code_assets/code_assets.dart';
 import 'package:crypto/crypto.dart' show sha256;
@@ -111,39 +112,45 @@ sealed class BuildMode {
 
 final class FetchMode extends BuildMode {
   FetchMode(super.input);
-  final httpClient = HttpClient();
 
   @override
   Future<Uri> build() async {
-    final rustTarget = asRustTarget(input.config.code);
-    final libraryType = input.config.buildStatic ? 'static' : 'dynamic';
-    final dylibRemoteUri = Uri.parse(
-      'https://github.com/mosuem/sigstore/releases/'
-      'download/$version/libsigstore_ffi-$libraryType-$rustTarget',
-    );
-    final request = await httpClient.getUrl(dylibRemoteUri);
-    final response = await request.close();
-    if (response.statusCode != 200) {
-      throw ArgumentError(
-        'The request to $dylibRemoteUri failed with status '
-        '${response.statusCode}',
+    final httpClient = HttpClient();
+    try {
+      final rustTarget = asRustTarget(input.config.code);
+      final libraryType = input.config.buildStatic ? 'static' : 'dynamic';
+      final dylibRemoteUri = Uri.parse(
+        'https://github.com/mosuem/sigstore/releases/'
+        'download/$version/libsigstore_ffi-$libraryType-$rustTarget',
       );
-    }
-    final bytes = await response.fold<List<int>>([], (a, b) => a..addAll(b));
-    final fileHash = sha256.convert(bytes).toString();
-    final expectedFileHash = fileHashes[(rustTarget, libraryType)];
-    if (expectedFileHash != null && fileHash != expectedFileHash) {
-      throw Exception(
-        'The pre-built binary for the target $rustTarget-$libraryType at '
-        '$dylibRemoteUri has a hash of $fileHash, which does not match '
-        '$expectedFileHash.',
+      final request = await httpClient.getUrl(dylibRemoteUri);
+      final response = await request.close();
+      if (response.statusCode != 200) {
+        throw ArgumentError(
+          'The request to $dylibRemoteUri failed with status '
+          '${response.statusCode}',
+        );
+      }
+      final builder = BytesBuilder(copy: false);
+      await response.forEach(builder.add);
+      final bytes = builder.takeBytes();
+      final fileHash = sha256.convert(bytes).toString();
+      final expectedFileHash = fileHashes[(rustTarget, libraryType)];
+      if (expectedFileHash != null && fileHash != expectedFileHash) {
+        throw Exception(
+          'The pre-built binary for the target $rustTarget-$libraryType at '
+          '$dylibRemoteUri has a hash of $fileHash, which does not match '
+          '$expectedFileHash.',
+        );
+      }
+      final library = File.fromUri(
+        input.outputDirectory.resolve(input.config.filename('sigstore_ffi')),
       );
+      await library.writeAsBytes(bytes);
+      return library.uri;
+    } finally {
+      httpClient.close();
     }
-    final library = File.fromUri(
-      input.outputDirectory.resolve(input.config.filename('sigstore_ffi')),
-    );
-    await library.writeAsBytes(bytes);
-    return library.uri;
   }
 
   @override

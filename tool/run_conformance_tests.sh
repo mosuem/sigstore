@@ -17,7 +17,7 @@ echo "==> Building Sigstore conformance CLI binary..."
 dart build cli -t bin/conformance.dart -o build/conformance_cli
 
 echo "==> Running Sigstore conformance tests..."
-CONFORMANCE_DIR="/tmp/sigstore-conformance-repo"
+CONFORMANCE_DIR="$DIR/build/sigstore-conformance-repo"
 if [ ! -d "$CONFORMANCE_DIR" ]; then
   echo "Cloning sigstore-conformance test suite to $CONFORMANCE_DIR..."
   git clone --depth 1 https://github.com/sigstore/sigstore-conformance.git "$CONFORMANCE_DIR"

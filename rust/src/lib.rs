@@ -225,9 +225,9 @@ pub mod ffi {
             write: &mut DiplomatWrite,
         ) -> Result<(), SigstoreError> {
             let mirror_str =
-                std::str::from_utf8(tuf_mirror_url).map_err(|_| SigstoreError::InvalidBundle)?;
+                std::str::from_utf8(tuf_mirror_url).map_err(|_| SigstoreError::InternalError)?;
             let cache_str =
-                std::str::from_utf8(cache_dir).map_err(|_| SigstoreError::InvalidBundle)?;
+                std::str::from_utf8(cache_dir).map_err(|_| SigstoreError::InternalError)?;
 
             let config =
                 if mirror_str.is_empty() || mirror_str == sigstore_trust_root::DEFAULT_TUF_URL {

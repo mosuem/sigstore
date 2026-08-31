@@ -2,7 +2,6 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
@@ -111,11 +110,11 @@ Future<void> _handleVerifyBundle(List<String> args) async {
   } else {
     final resolvedArtifact = _resolvePath(artifactArg);
     final artifactFile = File(resolvedArtifact);
-    if (artifactFile.existsSync()) {
-      artifactBytes = await artifactFile.readAsBytes();
-    } else {
-      artifactBytes = utf8.encode(artifactArg);
+    if (!artifactFile.existsSync()) {
+      stderr.writeln('Error: Artifact file does not exist: $resolvedArtifact');
+      exit(1);
     }
+    artifactBytes = await artifactFile.readAsBytes();
   }
 
   try {
@@ -152,6 +151,9 @@ Future<void> _handleSignBundle(List<String> args) async {
 }
 
 List<int> _hexToBytes(String hex) {
+  if (hex.length % 2 != 0) {
+    throw const FormatException('Hex string must have an even length');
+  }
   final bytes = <int>[];
   for (var i = 0; i < hex.length; i += 2) {
     bytes.add(int.parse(hex.substring(i, i + 2), radix: 16));
