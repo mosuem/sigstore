@@ -3,3 +3,6 @@
 
 # Test fixtures must be treated as binary to prevent CRLF alterations on Windows
 test/fixtures/** -text
+
+# Collapse sample bundle fixture in PR reviews and diffs
+test/fixtures/sample_bundle.json linguist-generated=true
