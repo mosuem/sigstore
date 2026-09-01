@@ -2,6 +2,7 @@
 
 ## 0.1.3
 
+- Add Native Assets link hook (`hook/link.dart`) with `package:record_use` and `package:native_toolchain_c` for binary tree-shaking.
 - Validate artifact hex digest length in conformance test runner.
 - Ensure `HttpClient` instances are cleanly closed in build hook and tool scripts.
 - Add `dart_dependency_validator.yaml` to configure dependencies for native asset build hooks.

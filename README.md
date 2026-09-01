@@ -11,8 +11,8 @@ A Dart client library for [Sigstore](https://www.sigstore.dev/) focused on **cry
 - **Flexible Trusted Roots**: Supports verification with the Sigstore Public Good Instance (Production), Sigstore Staging, or custom `trusted_root.json` files.
 - **Identity & Issuer Policy Verification**: Validates signer Subject Alternative Name (SAN) identities and OIDC issuers.
 - **Pre-computed Digest & Raw Byte Verification**: Verifies both raw artifact files and SHA-256 pre-computed digests (`sha256:...`).
-- **Flexible Native Asset Modes** (following `package:icu4x` conventions):
-  - `fetch` (default for package consumers): Automatically downloads precompiled native binaries from GitHub releases and verifies their SHA-256 hashes against `lib/src/hook_helpers/hashes.dart`.
+- **Flexible Native Asset Modes & Tree-Shaking** (following `package:icu4x` conventions):
+  - `fetch` (default for package consumers): Automatically downloads precompiled native binaries from GitHub releases and verifies their SHA-256 hashes against `lib/src/hook_helpers/hashes.dart`. When Native Assets linking is enabled, the static library is fetched and tree-shaken by `hook/link.dart` using `record_use` and `native_toolchain_c`.
   - `checkout`: Builds fresh native binaries directly from the embedded Rust crate using `cargo`.
   - `local`: Links against an existing binary specified via `localPath`.
 

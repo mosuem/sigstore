@@ -5,3 +5,6 @@
 ignore:
   - crypto
   - hooks
+  - logging
+  - native_toolchain_c
+  - record_use

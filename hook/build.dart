@@ -62,11 +62,14 @@ hooks:
       CodeAsset(
         package: input.packageName,
         name: 'src/bindings/lib.g.dart',
-        linkMode: input.config.buildStatic
-            ? StaticLinking()
-            : DynamicLoadingBundled(),
+        linkMode: DynamicLoadingBundled(),
         file: builtLibrary,
       ),
+      routing:
+          buildOptions.buildMode != BuildModeEnum.local &&
+              input.config.linkingEnabled
+          ? ToLinkHook(input.packageName)
+          : const ToAppBundle(),
     );
     output.dependencies.addAll(buildMode.dependencies);
     output.dependencies.add(input.packageRoot.resolve('pubspec.yaml'));
@@ -227,7 +230,8 @@ final class CheckoutMode extends BuildMode {
 }
 
 extension on BuildConfig {
-  bool get buildStatic => code.linkModePreference == LinkModePreference.static;
+  bool get buildStatic =>
+      code.linkModePreference == LinkModePreference.static || linkingEnabled;
 
   String Function(String) get filename => buildStatic
       ? code.targetOS.staticlibFileName
