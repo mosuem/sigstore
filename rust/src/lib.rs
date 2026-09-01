@@ -41,34 +41,6 @@ pub mod ffi {
             .map(|s| s.to_string())
     }
 
-    fn validate_trusted_root(root: &sigstore_trust_root::TrustedRoot) -> Result<(), SigstoreError> {
-        let tlog_valid = root.tlogs.iter().all(|t| {
-            t.public_key
-                .valid_for
-                .as_ref()
-                .is_none_or(|v| v.start.is_some())
-        });
-        let ctlog_valid = root.ctlogs.iter().all(|t| {
-            t.public_key
-                .valid_for
-                .as_ref()
-                .is_none_or(|v| v.start.is_some())
-        });
-        let ca_valid = root
-            .certificate_authorities
-            .iter()
-            .all(|ca| ca.valid_for.as_ref().is_none_or(|v| v.start.is_some()));
-        let tsa_valid = root
-            .timestamp_authorities
-            .iter()
-            .all(|tsa| tsa.valid_for.as_ref().is_none_or(|v| v.start.is_some()));
-
-        if tlog_valid && ctlog_valid && ca_valid && tsa_valid {
-            Ok(())
-        } else {
-            Err(SigstoreError::InvalidBundle)
-        }
-    }
 
     impl SigstoreVerificationPolicy {
         /// Create a new verification policy.
@@ -182,8 +154,6 @@ pub mod ffi {
                 )
                 .map_err(|_| SigstoreError::InternalError)?
             };
-
-            validate_trusted_root(&trusted_root)?;
 
             let artifact = if is_digest {
                 sigstore_types::Artifact::from_digest(artifact_bytes)

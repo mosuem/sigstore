@@ -9,9 +9,9 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 [dependencies]
 diplomat = "0.16.1"
 diplomat-runtime = "0.16.0"
-sigstore-verify = { version = "0.11", default-features = false, features = ["rustls"] }
-sigstore-types = "0.11"
-sigstore-trust-root = { version = "0.11", default-features = false, features = ["rustls", "tuf"] }
+sigstore-verify = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3", default-features = false, features = ["rustls"] }
+sigstore-types = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3" }
+sigstore-trust-root = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3", default-features = false, features = ["rustls", "tuf"] }
 tokio = { version = "1", features = ["rt", "macros"] }
 serde_json = "1.0"
 thiserror = "2.0"
