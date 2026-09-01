@@ -174,8 +174,7 @@ pub mod ffi {
                     v_policy = v_policy.require_issuer(iss.clone());
                 }
 
-                let verifier = sigstore_verify::Verifier::new(&trusted_root);
-                verifier.verify(artifact, &bundle.0, &v_policy)
+                sigstore_verify::verify(artifact, &bundle.0, &v_policy, &trusted_root)
             }
             .map_err(|_| SigstoreError::VerificationFailed)?;
 

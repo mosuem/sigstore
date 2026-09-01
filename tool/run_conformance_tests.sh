@@ -20,7 +20,7 @@ echo "==> Running Sigstore conformance tests..."
 CONFORMANCE_DIR="$DIR/build/sigstore-conformance-repo"
 if [ ! -d "$CONFORMANCE_DIR" ]; then
   echo "Cloning sigstore-conformance test suite to $CONFORMANCE_DIR..."
-  git clone --depth 1 https://github.com/sigstore/sigstore-conformance.git "$CONFORMANCE_DIR"
+  git -c url.https://github.com/.insteadof=https://github.com/ clone --depth 1 https://github.com/sigstore/sigstore-conformance.git "$CONFORMANCE_DIR"
 fi
 
 if ! python3 -c "import platformdirs, urllib3, cryptography, sigstore_protobuf_specs" &> /dev/null; then

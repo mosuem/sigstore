@@ -10,7 +10,10 @@ void main() async {
   print('Generating Dart bindings from Rust bridge via Diplomat...');
 
   final packageRoot = Platform.script.resolve('../');
-  final diplomatCargo = packageRoot.resolve('../diplomat/Cargo.toml');
+  var diplomatCargo = packageRoot.resolve('../diplomat/Cargo.toml');
+  if (!File.fromUri(diplomatCargo).existsSync()) {
+    diplomatCargo = packageRoot.resolve('../../diplomat/Cargo.toml');
+  }
   final rustLib = packageRoot.resolve('rust/src/lib.rs');
   final outBindings = packageRoot.resolve('lib/src/bindings/');
 
