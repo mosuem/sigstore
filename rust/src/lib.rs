@@ -53,7 +53,6 @@ pub mod ffi {
             .map(|s| s.to_string())
     }
 
-
     impl SigstoreVerificationPolicy {
         /// Creates a new verification policy.
         ///
