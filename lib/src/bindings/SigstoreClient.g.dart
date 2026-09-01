@@ -3,6 +3,7 @@
 
 part of 'lib.g.dart';
 
+/// Client for verifying Sigstore signatures and managing trusted root material.
 final class SigstoreClient implements ffi.Finalizable {
   final ffi.Pointer<ffi.Opaque> _ffi;
 
@@ -27,13 +28,18 @@ final class SigstoreClient implements ffi.Finalizable {
 
   static final _finalizer = ffi.NativeFinalizer(ffi.Native.addressOf(_internal_sigstore_SigstoreClient_destroy_mv1));
 
-  /// Create a Sigstore client.
+  /// Creates a new Sigstore client instance.
   static SigstoreClient create() {
     final result = _sigstore_SigstoreClient_create_mv1();
     return SigstoreClient._fromFfi(result, []);
   }
 
-  /// Verify an artifact against a Sigstore bundle and verification policy.
+  /// Verifies an artifact against a Sigstore bundle and verification policy.
+  ///
+  /// - `artifact_bytes`: Raw artifact bytes, or precomputed SHA-256 digest bytes if `is_digest` is true.
+  /// - `is_digest`: Set to `true` if `artifact_bytes` contains the precomputed SHA-256 digest (32 bytes).
+  /// - `bundle`: The parsed bundle containing signatures and verification material.
+  /// - `policy`: The verification policy specifying expected identity, issuer, and trusted root.
   ///
   /// Throws [SigstoreError] on failure.
   SigstoreVerificationResult verify(core.List<int> artifactBytes, bool isDigest, SigstoreBundle bundle, SigstoreVerificationPolicy policy) {
@@ -45,8 +51,12 @@ final class SigstoreClient implements ffi.Finalizable {
     return SigstoreVerificationResult._fromFfi(result.union.ok, []);
   }
 
-  /// Refresh the TUF trusted root from the Sigstore TUF mirror into [cache_dir]
-  /// using full TUF verification. Returns the verified `trusted_root.json` string.
+  /// Refreshes the TUF trusted root from the Sigstore TUF mirror into `cache_dir` using full TUF verification.
+  ///
+  /// - `tuf_mirror_url`: URL of the Sigstore TUF repository mirror (e.g. `https://tuf-repo-cdn.sigstore.dev`).
+  /// - `cache_dir`: Local filesystem directory path to cache downloaded TUF metadata and targets.
+  ///
+  /// Returns the verified `trusted_root.json` string.
   ///
   /// Throws [SigstoreError] on failure.
   String refreshTrustedRoot(String tufMirrorUrl, String cacheDir) {

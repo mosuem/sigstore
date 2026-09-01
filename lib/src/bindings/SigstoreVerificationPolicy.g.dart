@@ -3,6 +3,7 @@
 
 part of 'lib.g.dart';
 
+/// Policy configuration specifying expected signing identity, issuer, trusted root, and network options for verification.
 final class SigstoreVerificationPolicy implements ffi.Finalizable {
   final ffi.Pointer<ffi.Opaque> _ffi;
 
@@ -27,7 +28,14 @@ final class SigstoreVerificationPolicy implements ffi.Finalizable {
 
   static final _finalizer = ffi.NativeFinalizer(ffi.Native.addressOf(_internal_sigstore_SigstoreVerificationPolicy_destroy_mv1));
 
-  /// Create a new verification policy.
+  /// Creates a new verification policy.
+  ///
+  /// - `expected_identity`: Expected certificate subject (SAN email or URI). If empty, identity is not restricted.
+  /// - `expected_issuer`: Expected OIDC issuer URL (e.g. `https://token.actions.githubusercontent.com`). If empty, issuer is not restricted.
+  /// - `offline`: Whether to perform verification offline without network access.
+  /// - `is_staging`: Whether to verify against Sigstore's staging environment instead of production.
+  /// - `trusted_root_json`: Optional custom trusted root JSON string. If empty, the default Sigstore root is used.
+  /// - `public_key_pem`: Optional PEM-encoded public key for verifying bundles created with pre-shared keys.
   ///
   /// Throws [SigstoreError] on failure.
   static SigstoreVerificationPolicy create(String expectedIdentity, String expectedIssuer, bool offline, bool isStaging, String trustedRootJson, String publicKeyPem) {

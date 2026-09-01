@@ -4,19 +4,30 @@ pub mod ffi {
     use diplomat_runtime::{DiplomatStr, DiplomatWrite};
     use std::fmt::Write as _;
 
+    /// Errors that can occur during Sigstore bundle parsing, verification, or root refresh.
     #[diplomat::enum_convert(crate::Error)]
     pub enum SigstoreError {
+        /// The bundle is structurally invalid, cannot be parsed from JSON, or contains malformed verification material.
         InvalidBundle,
+        /// Cryptographic verification failed.
+        ///
+        /// This can happen if the signature does not match, the certificate does not chain to the trusted root,
+        /// the identity or issuer does not match policy expectations, or transparency log proofs fail.
         VerificationFailed,
+        /// An internal error occurred during verification or cryptographic operations.
         InternalError,
     }
 
+    /// A Sigstore bundle containing signature material, verification material (such as X.509 certificates
+    /// or public key hints), and transparency log inclusion proofs.
     #[diplomat::opaque]
     pub struct SigstoreBundle(pub sigstore_types::Bundle);
 
+    /// Client for verifying Sigstore signatures and managing trusted root material.
     #[diplomat::opaque]
     pub struct SigstoreClient(pub ());
 
+    /// The result of verifying an artifact against a Sigstore bundle and verification policy.
     #[diplomat::opaque]
     pub struct SigstoreVerificationResult {
         pub is_valid: bool,
@@ -24,6 +35,7 @@ pub mod ffi {
         pub issuer: String,
     }
 
+    /// Policy configuration specifying expected signing identity, issuer, trusted root, and network options for verification.
     #[diplomat::opaque]
     pub struct SigstoreVerificationPolicy {
         pub expected_identity: Option<String>,
@@ -43,7 +55,14 @@ pub mod ffi {
 
 
     impl SigstoreVerificationPolicy {
-        /// Create a new verification policy.
+        /// Creates a new verification policy.
+        ///
+        /// - `expected_identity`: Expected certificate subject (SAN email or URI). If empty, identity is not restricted.
+        /// - `expected_issuer`: Expected OIDC issuer URL (e.g. `https://token.actions.githubusercontent.com`). If empty, issuer is not restricted.
+        /// - `offline`: Whether to perform verification offline without network access.
+        /// - `is_staging`: Whether to verify against Sigstore's staging environment instead of production.
+        /// - `trusted_root_json`: Optional custom trusted root JSON string. If empty, the default Sigstore root is used.
+        /// - `public_key_pem`: Optional PEM-encoded public key for verifying bundles created with pre-shared keys.
         pub fn create(
             expected_identity: &DiplomatStr,
             expected_issuer: &DiplomatStr,
@@ -79,7 +98,7 @@ pub mod ffi {
                 .map_err(|_| SigstoreError::InvalidBundle)
         }
 
-        /// Parse a Sigstore bundle from JSON string.
+        /// Parses a Sigstore bundle from a JSON string.
         pub fn from_json(json: &DiplomatStr) -> Result<Box<SigstoreBundle>, SigstoreError> {
             let json_str = std::str::from_utf8(json).map_err(|_| SigstoreError::InvalidBundle)?;
             let bundle: sigstore_types::Bundle =
@@ -87,14 +106,14 @@ pub mod ffi {
             Ok(Box::new(SigstoreBundle(bundle)))
         }
 
-        /// Export the Sigstore bundle to JSON string.
+        /// Serializes the Sigstore bundle to a JSON string.
         pub fn to_json(&self, write: &mut DiplomatWrite) -> Result<(), SigstoreError> {
             let json = serde_json::to_string(&self.0).map_err(|_| SigstoreError::InternalError)?;
             write!(write, "{}", json).map_err(|_| SigstoreError::InternalError)?;
             Ok(())
         }
 
-        /// Get certificate subject (SAN email/URI).
+        /// Returns the certificate subject (subject alternative name email or URI) from the signing certificate.
         pub fn get_certificate_subject(
             &self,
             write: &mut DiplomatWrite,
@@ -105,7 +124,7 @@ pub mod ffi {
             Ok(())
         }
 
-        /// Get certificate OIDC issuer.
+        /// Returns the OIDC issuer URL from the signing certificate extensions.
         pub fn get_certificate_issuer(
             &self,
             write: &mut DiplomatWrite,
@@ -116,7 +135,7 @@ pub mod ffi {
             Ok(())
         }
 
-        /// Get Rekor log index if present.
+        /// Returns the Rekor transparency log index if present, or `-1` if no log entry is present.
         pub fn get_rekor_log_index(&self) -> i64 {
             self.0
                 .verification_material
@@ -127,12 +146,17 @@ pub mod ffi {
     }
 
     impl SigstoreClient {
-        /// Create a Sigstore client.
+        /// Creates a new Sigstore client instance.
         pub fn create() -> Box<SigstoreClient> {
             Box::new(SigstoreClient(()))
         }
 
-        /// Verify an artifact against a Sigstore bundle and verification policy.
+        /// Verifies an artifact against a Sigstore bundle and verification policy.
+        ///
+        /// - `artifact_bytes`: Raw artifact bytes, or precomputed SHA-256 digest bytes if `is_digest` is true.
+        /// - `is_digest`: Set to `true` if `artifact_bytes` contains the precomputed SHA-256 digest (32 bytes).
+        /// - `bundle`: The parsed bundle containing signatures and verification material.
+        /// - `policy`: The verification policy specifying expected identity, issuer, and trusted root.
         pub fn verify(
             &self,
             artifact_bytes: &[u8],
@@ -185,8 +209,12 @@ pub mod ffi {
             }))
         }
 
-        /// Refresh the TUF trusted root from the Sigstore TUF mirror into [cache_dir]
-        /// using full TUF verification. Returns the verified `trusted_root.json` string.
+        /// Refreshes the TUF trusted root from the Sigstore TUF mirror into `cache_dir` using full TUF verification.
+        ///
+        /// - `tuf_mirror_url`: URL of the Sigstore TUF repository mirror (e.g. `https://tuf-repo-cdn.sigstore.dev`).
+        /// - `cache_dir`: Local filesystem directory path to cache downloaded TUF metadata and targets.
+        ///
+        /// Returns the verified `trusted_root.json` string.
         pub fn refresh_trusted_root(
             &self,
             tuf_mirror_url: &DiplomatStr,
@@ -237,15 +265,18 @@ pub mod ffi {
     }
 
     impl SigstoreVerificationResult {
+        /// Returns `true` if the artifact signature and verification materials are valid.
         pub fn is_valid(&self) -> bool {
             self.is_valid
         }
 
+        /// Returns the verified signing identity (subject alternative name email or URI) from the certificate.
         pub fn verified_identity(&self, write: &mut DiplomatWrite) -> Result<(), SigstoreError> {
             write!(write, "{}", self.identity).map_err(|_| SigstoreError::InternalError)?;
             Ok(())
         }
 
+        /// Returns the verified OIDC issuer URL from the signing certificate extensions.
         pub fn verified_issuer(&self, write: &mut DiplomatWrite) -> Result<(), SigstoreError> {
             write!(write, "{}", self.issuer).map_err(|_| SigstoreError::InternalError)?;
             Ok(())

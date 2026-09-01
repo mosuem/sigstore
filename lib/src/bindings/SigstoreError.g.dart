@@ -3,12 +3,16 @@
 
 part of 'lib.g.dart';
 
+/// Errors that can occur during Sigstore bundle parsing, verification, or root refresh.
 enum SigstoreError {
-  // ignore: public_member_api_docs
+  /// The bundle is structurally invalid, cannot be parsed from JSON, or contains malformed verification material.
   invalidBundle,
-  // ignore: public_member_api_docs
+  /// Cryptographic verification failed.
+  ///
+  /// This can happen if the signature does not match, the certificate does not chain to the trusted root,
+  /// the identity or issuer does not match policy expectations, or transparency log proofs fail.
   verificationFailed,
-  // ignore: public_member_api_docs
+  /// An internal error occurred during verification or cryptographic operations.
   internalError;
 
 }

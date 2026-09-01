@@ -3,6 +3,7 @@
 
 part of 'lib.g.dart';
 
+/// The result of verifying an artifact against a Sigstore bundle and verification policy.
 final class SigstoreVerificationResult implements ffi.Finalizable {
   final ffi.Pointer<ffi.Opaque> _ffi;
 
@@ -27,12 +28,13 @@ final class SigstoreVerificationResult implements ffi.Finalizable {
 
   static final _finalizer = ffi.NativeFinalizer(ffi.Native.addressOf(_internal_sigstore_SigstoreVerificationResult_destroy_mv1));
 
+  /// Returns `true` if the artifact signature and verification materials are valid.
   bool isValid() {
     final result = _sigstore_SigstoreVerificationResult_is_valid_mv1(_ffi);
     return result;
   }
 
-  ///
+  /// Returns the verified signing identity (subject alternative name email or URI) from the certificate.
   ///
   /// Throws [SigstoreError] on failure.
   String verifiedIdentity() {
@@ -44,7 +46,7 @@ final class SigstoreVerificationResult implements ffi.Finalizable {
     return write.finalize();
   }
 
-  ///
+  /// Returns the verified OIDC issuer URL from the signing certificate extensions.
   ///
   /// Throws [SigstoreError] on failure.
   String verifiedIssuer() {

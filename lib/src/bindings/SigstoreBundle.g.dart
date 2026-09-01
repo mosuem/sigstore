@@ -3,6 +3,8 @@
 
 part of 'lib.g.dart';
 
+/// A Sigstore bundle containing signature material, verification material (such as X.509 certificates
+/// or public key hints), and transparency log inclusion proofs.
 final class SigstoreBundle implements ffi.Finalizable {
   final ffi.Pointer<ffi.Opaque> _ffi;
 
@@ -27,7 +29,7 @@ final class SigstoreBundle implements ffi.Finalizable {
 
   static final _finalizer = ffi.NativeFinalizer(ffi.Native.addressOf(_internal_sigstore_SigstoreBundle_destroy_mv1));
 
-  /// Parse a Sigstore bundle from JSON string.
+  /// Parses a Sigstore bundle from a JSON string.
   ///
   /// Throws [SigstoreError] on failure.
   static SigstoreBundle fromJson(String json) {
@@ -39,7 +41,7 @@ final class SigstoreBundle implements ffi.Finalizable {
     return SigstoreBundle._fromFfi(result.union.ok, []);
   }
 
-  /// Export the Sigstore bundle to JSON string.
+  /// Serializes the Sigstore bundle to a JSON string.
   ///
   /// Throws [SigstoreError] on failure.
   String toJson() {
@@ -51,7 +53,7 @@ final class SigstoreBundle implements ffi.Finalizable {
     return write.finalize();
   }
 
-  /// Get certificate subject (SAN email/URI).
+  /// Returns the certificate subject (subject alternative name email or URI) from the signing certificate.
   ///
   /// Throws [SigstoreError] on failure.
   String getCertificateSubject() {
@@ -63,7 +65,7 @@ final class SigstoreBundle implements ffi.Finalizable {
     return write.finalize();
   }
 
-  /// Get certificate OIDC issuer.
+  /// Returns the OIDC issuer URL from the signing certificate extensions.
   ///
   /// Throws [SigstoreError] on failure.
   String getCertificateIssuer() {
@@ -75,7 +77,7 @@ final class SigstoreBundle implements ffi.Finalizable {
     return write.finalize();
   }
 
-  /// Get Rekor log index if present.
+  /// Returns the Rekor transparency log index if present, or `-1` if no log entry is present.
   int getRekorLogIndex() {
     final result = _sigstore_SigstoreBundle_get_rekor_log_index_mv1(_ffi);
     return result;
