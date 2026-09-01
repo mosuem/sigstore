@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3
+
+- Validate artifact hex digest length in conformance test runner.
+- Ensure `HttpClient` instances are cleanly closed in build hook and tool scripts.
+- Add `dart_dependency_validator.yaml` to configure dependencies for native asset build hooks.
+- Remove unused `logging` dependency.
+- Map `SigstoreError::InternalError` explicitly in Rust bindings.
+
 ## 0.1.2
 
 - Optimize precompiled Rust binary size using release profile size optimizations, LTO, single codegen unit, and symbol stripping.
