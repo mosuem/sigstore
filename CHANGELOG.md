@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4
+
+- Add comprehensive API documentation to all FFI types, enums, variants, and methods.
+- Pin upstream `sigstore-rust` commit with `TOB-SIGSTORE-5` fix, removing custom trusted root validation workaround.
+- Simplify verification entry point in Rust bridge.
+- Remove redundant conformance binary forwarder.
+- Collapse generated bindings and fixtures in GitHub PR reviews and diffs via `.gitattributes`.
+
 ## 0.1.3
 
 - Validate artifact hex digest length in conformance test runner.
