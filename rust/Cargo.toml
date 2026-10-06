@@ -1,20 +1,25 @@
 [package]
 name = "sigstore_ffi"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
+aws-lc-rs = { path = "aws-lc-rs-boring" }
 diplomat = "0.16.1"
 diplomat-runtime = "0.16.0"
-sigstore-verify = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3", default-features = false, features = ["rustls"] }
+sigstore-verify = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3", default-features = false }
 sigstore-types = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3" }
-sigstore-trust-root = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3", default-features = false, features = ["rustls", "tuf"] }
-tokio = { version = "1", features = ["rt", "macros"] }
+sigstore-trust-root = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3", default-features = false }
+sigstore-tuf = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3", default-features = false }
+jiff = "0.2"
 serde_json = "1.0"
 thiserror = "2.0"
+
+[patch.crates-io]
+aws-lc-rs = { path = "aws-lc-rs-boring" }
 
 [profile.release]
 opt-level = "s"

@@ -28,8 +28,22 @@ final class SigstoreClient implements ffi.Finalizable {
 
   static final _finalizer = ffi.NativeFinalizer(ffi.Native.addressOf(_internal_sigstore_SigstoreClient_destroy_mv1));
 
+  /// Initializes the BoringSSL function pointer table from `package:boring` (`libbssl_dart`).
+  ///
+  /// `symbol_addrs` must contain the exact 28 function pointers defined by `BoringSymbols`.
+  ///
+  /// Throws [SigstoreError] on failure.
+  static void initBoring(core.List<int> symbolAddrs) {
+    final temp = _FinalizedArena();
+    final result = _sigstore_SigstoreClient_init_boring_mv1(symbolAddrs._usizeAllocIn(temp.arena));
+    if (!result.isOk) {
+      throw SigstoreError.values[result.union.err];
+    }
+  }
+
   /// Creates a new Sigstore client instance.
   static SigstoreClient create() {
+    ensureBoringInitialized();
     final result = _sigstore_SigstoreClient_create_mv1();
     return SigstoreClient._fromFfi(result, []);
   }
@@ -51,24 +65,6 @@ final class SigstoreClient implements ffi.Finalizable {
     return SigstoreVerificationResult._fromFfi(result.union.ok, []);
   }
 
-  /// Refreshes the TUF trusted root from the Sigstore TUF mirror into `cache_dir` using full TUF verification.
-  ///
-  /// - `tuf_mirror_url`: URL of the Sigstore TUF repository mirror (e.g. `https://tuf-repo-cdn.sigstore.dev`).
-  /// - `cache_dir`: Local filesystem directory path to cache downloaded TUF metadata and targets.
-  ///
-  /// Returns the verified `trusted_root.json` string.
-  ///
-  /// Throws [SigstoreError] on failure.
-  String refreshTrustedRoot(String tufMirrorUrl, String cacheDir) {
-    final temp = _FinalizedArena();
-    final write = _Write();
-    final result = _sigstore_SigstoreClient_refresh_trusted_root_mv1(_ffi, tufMirrorUrl._utf8AllocIn(temp.arena), cacheDir._utf8AllocIn(temp.arena), write._ffi);
-    if (!result.isOk) {
-      throw SigstoreError.values[result.union.err];
-    }
-    return write.finalize();
-  }
-
 }
 
 // ignore: experimental_member_use
@@ -76,6 +72,12 @@ final class SigstoreClient implements ffi.Finalizable {
 @ffi.Native<ffi.Void Function(ffi.Pointer<ffi.Void>)>(isLeaf: true, symbol: 'sigstore_SigstoreClient_destroy_mv1')
 // ignore: non_constant_identifier_names
 external void _internal_sigstore_SigstoreClient_destroy_mv1(ffi.Pointer<ffi.Void> self);
+
+// ignore: experimental_member_use
+@meta.RecordUse()
+@ffi.Native<_ResultVoidInt32 Function(_SliceUsize)>(isLeaf: true, symbol: 'sigstore_SigstoreClient_init_boring_mv1')
+// ignore: non_constant_identifier_names
+external _ResultVoidInt32 _sigstore_SigstoreClient_init_boring_mv1(_SliceUsize symbolAddrs);
 
 // ignore: experimental_member_use
 @meta.RecordUse()
@@ -88,11 +90,5 @@ external ffi.Pointer<ffi.Opaque> _sigstore_SigstoreClient_create_mv1();
 @ffi.Native<_ResultOpaqueInt32 Function(ffi.Pointer<ffi.Opaque>, _SliceUint8, ffi.Bool, ffi.Pointer<ffi.Opaque>, ffi.Pointer<ffi.Opaque>)>(isLeaf: true, symbol: 'sigstore_SigstoreClient_verify_mv1')
 // ignore: non_constant_identifier_names
 external _ResultOpaqueInt32 _sigstore_SigstoreClient_verify_mv1(ffi.Pointer<ffi.Opaque> self, _SliceUint8 artifactBytes, bool isDigest, ffi.Pointer<ffi.Opaque> bundle, ffi.Pointer<ffi.Opaque> policy);
-
-// ignore: experimental_member_use
-@meta.RecordUse()
-@ffi.Native<_ResultVoidInt32 Function(ffi.Pointer<ffi.Opaque>, _SliceUtf8, _SliceUtf8, ffi.Pointer<ffi.Opaque>)>(isLeaf: true, symbol: 'sigstore_SigstoreClient_refresh_trusted_root_mv1')
-// ignore: non_constant_identifier_names
-external _ResultVoidInt32 _sigstore_SigstoreClient_refresh_trusted_root_mv1(ffi.Pointer<ffi.Opaque> self, _SliceUtf8 tufMirrorUrl, _SliceUtf8 cacheDir, ffi.Pointer<ffi.Opaque> write);
 
 // dart format on

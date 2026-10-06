@@ -1,8 +1,123 @@
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
+
+/// Default Sigstore production TUF repository URL
+pub const DEFAULT_TUF_URL: &str = "https://tuf-repo-cdn.sigstore.dev";
+
+/// Sigstore staging TUF repository URL
+pub const STAGING_TUF_URL: &str = "https://tuf-repo-cdn.sigstage.dev";
+
+/// GitHub artifact attestation TUF repository URL
+pub const GITHUB_TUF_URL: &str = "https://tuf-repo.github.com";
+
+/// Embedded root.json for production TUF instance
+pub const PRODUCTION_TUF_ROOT: &[u8] = include_bytes!("../repository/tuf_root.json");
+
+/// Embedded root.json for staging TUF instance
+pub const STAGING_TUF_ROOT: &[u8] = include_bytes!("../repository/tuf_staging_root.json");
+
+/// Embedded root.json for GitHub's artifact attestation TUF instance
+pub const GITHUB_TUF_ROOT: &[u8] = include_bytes!("../repository/tuf_github_root.json");
+
+pub(crate) struct TufBridgeState {
+    pub pending_url: Option<String>,
+    pub pending_max_length: u64,
+    pub response: Option<sigstore_tuf::Result<Option<Vec<u8>>>>,
+}
+
+struct BridgeFetchFuture {
+    state: Arc<Mutex<TufBridgeState>>,
+    url: String,
+    max_length: u64,
+    registered: bool,
+}
+
+impl Future for BridgeFetchFuture {
+    type Output = sigstore_tuf::Result<Option<Vec<u8>>>;
+
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.as_mut().get_mut();
+        let mut st = this.state.lock().unwrap();
+        if !this.registered {
+            st.pending_url = Some(this.url.clone());
+            st.pending_max_length = this.max_length;
+            this.registered = true;
+            return Poll::Pending;
+        }
+        if let Some(res) = st.response.take() {
+            if let Ok(Some(ref body)) = res {
+                if body.len() as u64 > this.max_length {
+                    return Poll::Ready(Err(sigstore_tuf::Error::Transport(format!(
+                        "{}: response exceeds max length {}",
+                        this.url, this.max_length
+                    ))));
+                }
+            }
+            return Poll::Ready(res);
+        }
+        st.pending_url = Some(this.url.clone());
+        st.pending_max_length = this.max_length;
+        Poll::Pending
+    }
+}
+
+struct BridgeRepository {
+    base_url: String,
+    state: Arc<Mutex<TufBridgeState>>,
+}
+
+impl sigstore_tuf::Repository for BridgeRepository {
+    fn fetch_metadata<'a>(
+        &'a self,
+        name: &'a str,
+        max_length: u64,
+    ) -> sigstore_tuf::transport::FetchFuture<'a> {
+        let base = self.base_url.trim_end_matches('/');
+        let rel = name.trim_start_matches('/');
+        let url = format!("{base}/{rel}");
+        Box::pin(BridgeFetchFuture {
+            state: self.state.clone(),
+            url,
+            max_length,
+            registered: false,
+        })
+    }
+
+    fn fetch_target<'a>(
+        &'a self,
+        path: &'a str,
+        max_length: u64,
+    ) -> sigstore_tuf::transport::FetchFuture<'a> {
+        let base = self.base_url.trim_end_matches('/');
+        let rel = path.trim_start_matches('/');
+        let url = format!("{base}/targets/{rel}");
+        Box::pin(BridgeFetchFuture {
+            state: self.state.clone(),
+            url,
+            max_length,
+            registered: false,
+        })
+    }
+}
+
+type TufRefreshFuture = Pin<Box<dyn Future<Output = Result<String, Error>>>>;
+
+pub struct TufUpdaterInner {
+    pub(crate) state: Arc<Mutex<TufBridgeState>>,
+    pub(crate) fut: Mutex<TufRefreshFuture>,
+    pub(crate) result: Mutex<Option<String>>,
+}
+
 #[diplomat::bridge]
 #[diplomat::abi_rename = "sigstore_{0}_mv1"]
 pub mod ffi {
     use diplomat_runtime::{DiplomatStr, DiplomatWrite};
     use std::fmt::Write as _;
+    use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
+    use std::task::{Context, Poll, Waker};
 
     /// Errors that can occur during Sigstore bundle parsing, verification, or root refresh.
     #[diplomat::enum_convert(crate::Error)]
@@ -26,6 +141,10 @@ pub mod ffi {
     /// Client for verifying Sigstore signatures and managing trusted root material.
     #[diplomat::opaque]
     pub struct SigstoreClient(pub ());
+
+    /// State machine driving the `sigstore-tuf` verification workflow over an external HTTP client.
+    #[diplomat::opaque]
+    pub struct SigstoreTufUpdater(pub crate::TufUpdaterInner);
 
     /// The result of verifying an artifact against a Sigstore bundle and verification policy.
     #[diplomat::opaque]
@@ -145,6 +264,16 @@ pub mod ffi {
     }
 
     impl SigstoreClient {
+        /// Initializes the BoringSSL function pointer table from `package:boring` (`libbssl_dart`).
+        ///
+        /// `symbol_addrs` must contain the exact 28 function pointers defined by `BoringSymbols`.
+        pub fn init_boring(symbol_addrs: &[usize]) -> Result<(), SigstoreError> {
+            unsafe {
+                aws_lc_rs::init_boring_symbols_from_slice(symbol_addrs)
+                    .map_err(|_| SigstoreError::InternalError)
+            }
+        }
+
         /// Creates a new Sigstore client instance.
         pub fn create() -> Box<SigstoreClient> {
             Box::new(SigstoreClient(()))
@@ -207,58 +336,143 @@ pub mod ffi {
                 issuer: res.issuer.unwrap_or_default(),
             }))
         }
+    }
 
-        /// Refreshes the TUF trusted root from the Sigstore TUF mirror into `cache_dir` using full TUF verification.
-        ///
-        /// - `tuf_mirror_url`: URL of the Sigstore TUF repository mirror (e.g. `https://tuf-repo-cdn.sigstore.dev`).
-        /// - `cache_dir`: Local filesystem directory path to cache downloaded TUF metadata and targets.
-        ///
-        /// Returns the verified `trusted_root.json` string.
-        pub fn refresh_trusted_root(
-            &self,
+    impl SigstoreTufUpdater {
+        /// Creates a new TUF refresh state machine for `tuf_mirror_url` and `cache_dir`.
+        pub fn create(
             tuf_mirror_url: &DiplomatStr,
             cache_dir: &DiplomatStr,
-            write: &mut DiplomatWrite,
-        ) -> Result<(), SigstoreError> {
+        ) -> Result<Box<SigstoreTufUpdater>, SigstoreError> {
             let mirror_str =
                 std::str::from_utf8(tuf_mirror_url).map_err(|_| SigstoreError::InternalError)?;
             let cache_str =
                 std::str::from_utf8(cache_dir).map_err(|_| SigstoreError::InternalError)?;
 
-            let config =
-                if mirror_str.is_empty() || mirror_str == sigstore_trust_root::DEFAULT_TUF_URL {
-                    let mut c = sigstore_trust_root::TufConfig::production();
-                    if !cache_str.is_empty() {
-                        c = c.with_cache_dir(std::path::PathBuf::from(cache_str));
-                    }
-                    c
-                } else if mirror_str == sigstore_trust_root::STAGING_TUF_URL {
-                    let mut c = sigstore_trust_root::TufConfig::staging();
-                    if !cache_str.is_empty() {
-                        c = c.with_cache_dir(std::path::PathBuf::from(cache_str));
-                    }
-                    c
-                } else {
-                    let mut c = sigstore_trust_root::TufConfig::custom(mirror_str);
-                    if !cache_str.is_empty() {
-                        c = c.with_cache_dir(std::path::PathBuf::from(cache_str));
-                    }
-                    c
-                };
+            let base_url = if mirror_str.is_empty() {
+                crate::DEFAULT_TUF_URL.to_string()
+            } else {
+                mirror_str.to_string()
+            };
+            let normalized_url = base_url.trim_end_matches('/');
 
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map_err(|_| SigstoreError::InternalError)?;
+            if !normalized_url.starts_with("http://") && !normalized_url.starts_with("https://") {
+                return Err(SigstoreError::VerificationFailed);
+            }
 
-            let (trusted_root, _) = rt
-                .block_on(async { sigstore_trust_root::fetch_trust_material(config).await })
+            let root_bytes: Vec<u8> = if normalized_url == crate::DEFAULT_TUF_URL {
+                crate::PRODUCTION_TUF_ROOT.to_vec()
+            } else if normalized_url == crate::STAGING_TUF_URL {
+                crate::STAGING_TUF_ROOT.to_vec()
+            } else if normalized_url == crate::GITHUB_TUF_URL {
+                crate::GITHUB_TUF_ROOT.to_vec()
+            } else if !cache_str.is_empty() {
+                let cached_root = PathBuf::from(cache_str).join("root.json");
+                std::fs::read(&cached_root).unwrap_or_else(|_| crate::PRODUCTION_TUF_ROOT.to_vec())
+            } else {
+                crate::PRODUCTION_TUF_ROOT.to_vec()
+            };
+
+            let state = Arc::new(Mutex::new(crate::TufBridgeState {
+                pending_url: None,
+                pending_max_length: 0,
+                response: None,
+            }));
+
+            let repo = crate::BridgeRepository {
+                base_url,
+                state: state.clone(),
+            };
+
+            let mut updater = sigstore_tuf::Updater::new(repo, &root_bytes)
                 .map_err(|_| SigstoreError::VerificationFailed)?;
 
-            let trusted_root_str =
-                serde_json::to_string(&trusted_root).map_err(|_| SigstoreError::InternalError)?;
+            if !cache_str.is_empty() {
+                let cache_path = PathBuf::from(cache_str);
+                std::fs::create_dir_all(&cache_path)
+                    .map_err(|_| SigstoreError::VerificationFailed)?;
+                updater = updater.with_store(sigstore_tuf::FileStore::new(cache_path));
+            }
 
-            write!(write, "{}", trusted_root_str).map_err(|_| SigstoreError::InternalError)?;
+            let fut = Box::pin(async move {
+                let now = jiff::Timestamp::now();
+                updater
+                    .refresh(now)
+                    .await
+                    .map_err(|_| crate::Error::VerificationFailed)?;
+                let target_bytes = updater
+                    .get_target("trusted_root.json", now)
+                    .await
+                    .map_err(|_| crate::Error::VerificationFailed)?;
+                let target_str = std::str::from_utf8(&target_bytes)
+                    .map_err(|_| crate::Error::VerificationFailed)?;
+                let trusted_root = sigstore_trust_root::TrustedRoot::from_json(target_str)
+                    .map_err(|_| crate::Error::VerificationFailed)?;
+                serde_json::to_string(&trusted_root).map_err(|_| crate::Error::InternalError)
+            });
+
+            Ok(Box::new(SigstoreTufUpdater(crate::TufUpdaterInner {
+                state,
+                fut: Mutex::new(fut),
+                result: Mutex::new(None),
+            })))
+        }
+
+        /// Advances the TUF state machine until it either completes (writing an empty string)
+        /// or requests an HTTP GET (writing the pending URL to `write`).
+        pub fn poll(&self, write: &mut DiplomatWrite) -> Result<(), SigstoreError> {
+            let waker = Waker::noop();
+            let mut cx = Context::from_waker(waker);
+            let mut fut = self.0.fut.lock().unwrap();
+            match fut.as_mut().poll(&mut cx) {
+                Poll::Ready(Ok(trusted_root_json)) => {
+                    *self.0.result.lock().unwrap() = Some(trusted_root_json);
+                    Ok(())
+                }
+                Poll::Ready(Err(e)) => Err(e.into()),
+                Poll::Pending => {
+                    let st = self.0.state.lock().unwrap();
+                    let url = st
+                        .pending_url
+                        .as_deref()
+                        .ok_or(SigstoreError::InternalError)?;
+                    write!(write, "{}", url).map_err(|_| SigstoreError::InternalError)?;
+                    Ok(())
+                }
+            }
+        }
+
+        /// Returns the maximum allowed response size in bytes for the currently pending HTTP GET.
+        pub fn max_response_bytes(&self) -> usize {
+            self.0.state.lock().unwrap().pending_max_length as usize
+        }
+
+        /// Supplies the HTTP status code and response body for the currently pending HTTP GET.
+        pub fn provide_response(&self, status_code: u16, body: &[u8]) {
+            let mut st = self.0.state.lock().unwrap();
+            st.pending_url = None;
+            st.response = Some(match status_code {
+                200..=299 => Ok(Some(body.to_vec())),
+                403 | 404 => Ok(None),
+                _ => Err(sigstore_tuf::Error::Transport(format!(
+                    "HTTP status {status_code}"
+                ))),
+            });
+        }
+
+        /// Supplies a transport error for the currently pending HTTP GET.
+        pub fn provide_error(&self, message: &DiplomatStr) {
+            let msg = std::str::from_utf8(message).unwrap_or("HTTP transport error");
+            let mut st = self.0.state.lock().unwrap();
+            st.pending_url = None;
+            st.response = Some(Err(sigstore_tuf::Error::Transport(msg.to_string())));
+        }
+
+        /// Writes the verified `trusted_root.json` string after `poll` returns `true`.
+        pub fn take_result(&self, write: &mut DiplomatWrite) -> Result<(), SigstoreError> {
+            let res_guard = self.0.result.lock().unwrap();
+            let res = res_guard.as_deref().ok_or(SigstoreError::InternalError)?;
+            write!(write, "{}", res).map_err(|_| SigstoreError::InternalError)?;
             Ok(())
         }
     }
