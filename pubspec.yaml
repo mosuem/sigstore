@@ -21,6 +21,13 @@ dev_dependencies:
   dart_flutter_team_lints: ^3.5.0
   test: ^1.25.0
 
+# Override until boring 0.4.2 (mosuem/boring#10) is published to pub.dev.
+dependency_overrides:
+  boring:
+    git:
+      url: https://github.com/mosuem/boring.git
+      ref: expose-all-symbol-addresses
+
 hooks:
   user_defines:
     sigstore:
