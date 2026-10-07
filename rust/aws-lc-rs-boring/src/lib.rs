@@ -1,15 +1,35 @@
 //! `aws-lc-rs` drop-in replacement backed by `package:boring` (`libbssl_dart`).
 //!
-//! Instead of compiling or linking Amazon's `aws-lc-sys` C/C++/ASM library,
-//! this crate dispatches all cryptographic operations through a function pointer
-//! table (`BoringSymbols`) populated at startup from `package:boring`'s dynamic
-//! library in Dart.
+//! # Overview for Dart Developers
+//!
+//! `sigstore-rust` (`sigstore-crypto`) and `rustls-webpki` (used for X.509 certificate chain
+//! validation) both depend on the [`aws-lc-rs`](https://crates.io/crates/aws-lc-rs) crate, which
+//! exposes the `ring`-style Rust cryptography API (`digest`, `signature`, `rand`, `pkcs8`, `error`).
+//!
+//! Upstream `aws-lc-rs` compiles and statically links `aws-lc-sys` (Amazon's C/C++/ASM fork of
+//! BoringSSL), which adds ~2.4 MB to the native library and requires CMake/C++ build tools.
+//! Because `package:sigstore` already depends on `package:boring` (which bundles BoringSSL via
+//! Dart Native Assets), `rust/Cargo.toml` uses `[patch.crates-io]` to redirect all `aws-lc-rs`
+//! imports to this pure-Rust crate.
+//!
+//! ## How Function Pointer Dispatch Works
+//!
+//! Instead of linking against `libbssl_dart` at Rust compile time (which would complicate OS
+//! dynamic linker paths across separate native asset build hooks and defeat `package:boring`'s
+//! `record_use` symbol tree-shaking):
+//! 1. Dart resolves the addresses of the 28 required BoringSSL functions via
+//!    `Native.addressOf(...)` in `lib/src/boring_init.dart`.
+//! 2. Dart passes those 28 addresses as a `UintPtr` list to `SigstoreVerifier.initBoring(...)`,
+//!    which calls [`init_boring_symbols_from_slice`] to populate [`BORING_SYMBOLS`].
+//! 3. All `digest` and `signature` calls in this crate invoke the C functions through [`bssl()`].
 
 #![allow(non_camel_case_types, non_snake_case, dead_code)]
 
 use std::ffi::{c_int, c_uint, c_void};
 use std::sync::OnceLock;
 
+/// Opaque C struct types representing BoringSSL pointers (`EVP_MD*`, `EVP_PKEY*`, etc.).
+/// Equivalent to `final class EVP_MD extends Opaque {}` in `dart:ffi`.
 pub mod FFI {
     use std::ffi::c_void;
 
@@ -27,21 +47,31 @@ pub mod FFI {
 
 use FFI::*;
 
+// BoringSSL `<openssl/rsa.h>` padding constants.
 const RSA_PKCS1_PADDING: c_int = 1;
 const RSA_PKCS1_PSS_PADDING: c_int = 6;
 const RSA_PSS_SALTLEN_DIGEST: c_int = -1;
 
+/// Exact number of BoringSSL C function pointers in [`BoringSymbols`].
+/// Must stay in sync with `_boringSymbolAddresses()` in `lib/src/boring_init.dart`.
 pub const BORING_SYMBOL_COUNT: usize = 28;
 
+/// Function pointer table populated from `package:boring` at startup.
+///
+/// **Important:** The field order here MUST exactly match the list order in
+/// `_boringSymbolAddresses()` in `lib/src/boring_init.dart`.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct BoringSymbols {
+    // Error queue cleanup (called after failed verifications so thread-local error state doesn't leak)
     pub ERR_clear_error: unsafe extern "C" fn(),
 
+    // Hash algorithm descriptors (SHA-256, SHA-384, SHA-512)
     pub EVP_sha256: unsafe extern "C" fn() -> *const EVP_MD,
     pub EVP_sha384: unsafe extern "C" fn() -> *const EVP_MD,
     pub EVP_sha512: unsafe extern "C" fn() -> *const EVP_MD,
 
+    // Streaming message digest (`EVP_MD_CTX`) lifecycle and one-shot message verification
     pub EVP_MD_CTX_new: unsafe extern "C" fn() -> *mut EVP_MD_CTX,
     pub EVP_MD_CTX_free: unsafe extern "C" fn(*mut EVP_MD_CTX),
     pub EVP_MD_CTX_copy_ex: unsafe extern "C" fn(*mut EVP_MD_CTX, *const EVP_MD_CTX) -> c_int,
@@ -59,9 +89,11 @@ pub struct BoringSymbols {
     pub EVP_DigestVerify:
         unsafe extern "C" fn(*mut EVP_MD_CTX, *const u8, usize, *const u8, usize) -> c_int,
 
+    // Public key (`EVP_PKEY`) lifecycle and key size inspection
     pub EVP_PKEY_free: unsafe extern "C" fn(*mut EVP_PKEY),
     pub EVP_PKEY_bits: unsafe extern "C" fn(*const EVP_PKEY) -> c_int,
 
+    // Pre-hashed digest signature verification (`EVP_PKEY_CTX`) and RSA padding configuration
     pub EVP_PKEY_CTX_new: unsafe extern "C" fn(*mut EVP_PKEY, *mut c_void) -> *mut EVP_PKEY_CTX,
     pub EVP_PKEY_CTX_free: unsafe extern "C" fn(*mut EVP_PKEY_CTX),
     pub EVP_PKEY_verify_init: unsafe extern "C" fn(*mut EVP_PKEY_CTX) -> c_int,
@@ -72,18 +104,21 @@ pub struct BoringSymbols {
     pub EVP_PKEY_CTX_set_signature_md:
         unsafe extern "C" fn(*mut EVP_PKEY_CTX, *const EVP_MD) -> c_int,
 
+    // Modern BoringSSL key algorithm descriptors for parsing SPKI and raw public keys
     pub EVP_pkey_ec_p256: unsafe extern "C" fn() -> *const EVP_PKEY_ALG,
     pub EVP_pkey_ec_p384: unsafe extern "C" fn() -> *const EVP_PKEY_ALG,
     pub EVP_pkey_ec_p521: unsafe extern "C" fn() -> *const EVP_PKEY_ALG,
     pub EVP_pkey_ed25519: unsafe extern "C" fn() -> *const EVP_PKEY_ALG,
     pub EVP_pkey_rsa: unsafe extern "C" fn() -> *const EVP_PKEY_ALG,
 
+    // Public key parsers (Ed25519 raw 32-byte key and X.509 SubjectPublicKeyInfo DER)
     pub EVP_PKEY_from_raw_public_key:
         unsafe extern "C" fn(*const EVP_PKEY_ALG, *const u8, usize) -> *mut EVP_PKEY,
     pub EVP_PKEY_from_subject_public_key_info:
         unsafe extern "C" fn(*const u8, usize, *const *const EVP_PKEY_ALG, usize) -> *mut EVP_PKEY,
 }
 
+/// Global write-once storage for the BoringSSL function pointer table (similar to `late final` in Dart).
 static BORING_SYMBOLS: OnceLock<BoringSymbols> = OnceLock::new();
 
 /// Initialize the BoringSSL function pointer table from an array of 28 symbol addresses.
@@ -101,18 +136,21 @@ pub unsafe fn init_boring_symbols_from_slice(addrs: &[usize]) -> Result<(), &'st
     let ptrs: [usize; BORING_SYMBOL_COUNT] = addrs
         .try_into()
         .map_err(|_| "invalid BoringSSL symbol table length")?;
+    // Reinterpret the 28 `usize` addresses as the 28 `extern "C" fn` fields in `BoringSymbols`.
     let syms: BoringSymbols = unsafe { std::mem::transmute(ptrs) };
     let _ = BORING_SYMBOLS.set(syms);
     Ok(())
 }
 
+/// Returns the initialized BoringSSL function table, or panics if `init_boring` was not called.
 #[inline]
 pub(crate) fn bssl() -> &'static BoringSymbols {
     BORING_SYMBOLS.get().expect(
-        "package:boring symbols not initialized! Call SigstoreClient.initBoring() before using sigstore.",
+        "package:boring symbols not initialized! Call SigstoreClient.create() or ensureBoringInitialized() before using sigstore.",
     )
 }
 
+/// Clears BoringSSL's thread-local error queue so failed verification checks don't leave stale errors behind.
 #[inline]
 pub(crate) fn clear_error() {
     if let Some(s) = BORING_SYMBOLS.get() {
@@ -120,11 +158,14 @@ pub(crate) fn clear_error() {
     }
 }
 
+/// Stub for `aws_lc_rs::try_fips_mode` (unused in Dart builds).
 #[inline]
 pub fn try_fips_mode() -> Result<(), error::Unspecified> {
     Err(error::Unspecified)
 }
 
+/// RAII wrapper around a BoringSSL `*mut EVP_PKEY` pointer that automatically calls
+/// `EVP_PKEY_free` when dropped (when it goes out of scope).
 pub(crate) struct EvpPkey(*mut EVP_PKEY);
 
 unsafe impl Send for EvpPkey {}
@@ -156,25 +197,46 @@ impl Drop for EvpPkey {
     }
 }
 
-/// Wrap an algorithm identifier DER and raw public key bytes into a DER `SubjectPublicKeyInfo`.
+// ============================================================================
+// ASN.1 DER Conversion Helpers
+// ============================================================================
+//
+// `aws-lc-rs` (following `ring`'s API) passes *unwrapped* public key bytes to
+// `UnparsedPublicKey::verify` (e.g., raw EC point `0x04 || X || Y`, or raw PKCS#1 `RSAPublicKey`
+// sequence), whereas BoringSSL's modern `EVP_PKEY_from_subject_public_key_info` expects a full
+// X.509 `SubjectPublicKeyInfo` (SPKI) DER structure:
+//
+//   SubjectPublicKeyInfo ::= SEQUENCE {
+//       algorithm         AlgorithmIdentifier,
+//       subjectPublicKey  BIT STRING
+//   }
+//
+// Similarly, `aws-lc-rs` supports fixed-width `(r || s)` ECDSA signatures (IEEE P1363), whereas
+// BoringSSL's `EVP_DigestVerify` / `EVP_PKEY_verify` always expects ASN.1 DER-encoded ECDSA
+// signatures (`SEQUENCE { r INTEGER, s INTEGER }`). The helpers below bridge these formats in
+// pure Rust without needing extra BoringSSL `EC_KEY` or `BIGNUM` C symbols.
+
+/// Wraps an ASN.1 `AlgorithmIdentifier` DER slice and raw public key bytes into a DER
+/// `SubjectPublicKeyInfo` (`SEQUENCE { AlgorithmIdentifier, BIT STRING }`).
 pub(crate) fn wrap_spki(alg_id_der: &[u8], pub_key_bytes: &[u8]) -> Vec<u8> {
     let bit_string_content_len = 1 + pub_key_bytes.len();
     let mut bit_string = Vec::with_capacity(4 + bit_string_content_len);
-    bit_string.push(0x03);
+    bit_string.push(0x03); // ASN.1 tag: BIT STRING
     encode_der_length(&mut bit_string, bit_string_content_len);
-    bit_string.push(0x00); // 0 unused bits
+    bit_string.push(0x00); // 0 unused bits in final byte
     bit_string.extend_from_slice(pub_key_bytes);
 
     let seq_len = alg_id_der.len() + bit_string.len();
     let mut spki = Vec::with_capacity(4 + seq_len);
-    spki.push(0x30);
+    spki.push(0x30); // ASN.1 tag: SEQUENCE
     encode_der_length(&mut spki, seq_len);
     spki.extend_from_slice(alg_id_der);
     spki.extend_from_slice(&bit_string);
     spki
 }
 
-/// Convert a minimal positive ASN.1 `INTEGER` slice into a fixed-length big-endian scalar/coordinate.
+/// Converts a minimal positive ASN.1 `INTEGER` byte slice into a fixed-length big-endian
+/// coordinate, validating DER minimal-encoding rules.
 pub(crate) fn asn1_uint_to_fixed(
     bytes: &[u8],
     fixed_len: usize,
@@ -202,7 +264,8 @@ pub(crate) fn asn1_uint_to_fixed(
     Ok(out)
 }
 
-/// Convert a fixed-width `(r || s)` ECDSA signature into ASN.1 DER.
+/// Converts a fixed-width IEEE P1363 `(r || s)` ECDSA signature into ASN.1 DER
+/// (`SEQUENCE { r INTEGER, s INTEGER }`) for BoringSSL.
 pub(crate) fn fixed_ecdsa_sig_to_der(
     sig: &[u8],
     coord_len: usize,
@@ -214,23 +277,27 @@ pub(crate) fn fixed_ecdsa_sig_to_der(
     let s = encode_asn1_uint(&sig[coord_len..])?;
     let seq_len = r.len() + s.len();
     let mut der = Vec::with_capacity(4 + seq_len);
-    der.push(0x30);
+    der.push(0x30); // ASN.1 tag: SEQUENCE
     encode_der_length(&mut der, seq_len);
     der.extend_from_slice(&r);
     der.extend_from_slice(&s);
     Ok(der)
 }
 
+/// Encodes a big-endian unsigned integer slice (`r` or `s`) as a positive ASN.1 DER `INTEGER`.
 fn encode_asn1_uint(raw: &[u8]) -> Result<Vec<u8>, error::Unspecified> {
     let first_non_zero = raw.iter().position(|&b| b != 0);
     let Some(idx) = first_non_zero else {
+        // Zero is not a valid ECDSA signature component (r > 0, s > 0).
         return Err(error::Unspecified);
     };
     let significant = &raw[idx..];
+    // In two's-complement ASN.1 INTEGER, if the high bit is 1, prepend a 0x00 byte so it isn't
+    // interpreted as a negative number.
     let needs_leading_zero = (significant[0] & 0x80) != 0;
     let content_len = significant.len() + usize::from(needs_leading_zero);
     let mut out = Vec::with_capacity(2 + content_len);
-    out.push(0x02);
+    out.push(0x02); // ASN.1 tag: INTEGER
     encode_der_length(&mut out, content_len);
     if needs_leading_zero {
         out.push(0x00);
@@ -239,6 +306,7 @@ fn encode_asn1_uint(raw: &[u8]) -> Result<Vec<u8>, error::Unspecified> {
     Ok(out)
 }
 
+/// Appends an ASN.1 DER length field (short form `< 128`, or 1–2 byte long form).
 pub(crate) fn encode_der_length(out: &mut Vec<u8>, len: usize) {
     if len < 0x80 {
         out.push(len as u8);
@@ -252,6 +320,7 @@ pub(crate) fn encode_der_length(out: &mut Vec<u8>, len: usize) {
     }
 }
 
+/// Error types matching `aws_lc_rs::error` (`Unspecified` and `KeyRejected`).
 pub mod error {
     use std::fmt;
 
@@ -302,6 +371,12 @@ pub mod error {
     }
 }
 
+/// Stub implementation of `aws_lc_rs::rand`.
+///
+/// `sigstore-crypto` imports `aws_lc_rs::rand::SystemRandom` in its signing module, so these
+/// types must exist for `sigstore-crypto` to compile. Because `package:sigstore` only performs
+/// verification (which is deterministic and never generates random bytes), `fill` returns
+/// `Err(Unspecified)` rather than pulling `RAND_bytes` into our BoringSSL symbol table.
 pub mod rand {
     use crate::error;
 
@@ -342,6 +417,10 @@ pub mod rand {
     }
 }
 
+/// SHA-256, SHA-384, and SHA-512 hashing (`aws_lc_rs::digest`), backed by BoringSSL's `EVP_MD_CTX`.
+///
+/// Used by `sigstore-verify` (artifact hashing), `sigstore-merkle` (Rekor RFC 6962 Merkle tree
+/// inclusion proofs), and `sigstore-tuf` (TUF metadata and target hash verification).
 pub mod digest {
     use crate::bssl;
     use crate::FFI::{EVP_MD, EVP_MD_CTX};
@@ -362,6 +441,7 @@ pub mod digest {
     }
 
     impl DigestId {
+        /// Returns BoringSSL's singleton `const EVP_MD*` descriptor for this hash algorithm.
         pub(crate) fn evp_md(self) -> *const EVP_MD {
             let s = bssl();
             unsafe {
@@ -412,6 +492,7 @@ pub mod digest {
         id: DigestId::Sha512,
     };
 
+    /// A computed (or imported pre-computed) message digest (`SHA-256`, `SHA-384`, or `SHA-512`).
     #[derive(Clone, Copy)]
     pub struct Digest {
         algorithm: &'static Algorithm,
@@ -419,6 +500,9 @@ pub mod digest {
     }
 
     impl Digest {
+        /// Wraps an already-computed hash byte slice into a [`Digest`] so it can be passed to
+        /// `UnparsedPublicKey::verify_digest` (used when verifying Sigstore bundles against a
+        /// precomputed 32-byte artifact digest).
         pub fn import_less_safe(
             slice: &[u8],
             algorithm: &'static Algorithm,
@@ -454,6 +538,7 @@ pub mod digest {
         }
     }
 
+    /// Streaming hash state wrapping a BoringSSL `EVP_MD_CTX*`.
     pub struct Context {
         algorithm: &'static Algorithm,
         ctx: *mut EVP_MD_CTX,
@@ -540,6 +625,7 @@ pub mod digest {
         }
     }
 
+    /// Computes a one-shot digest of `data` using `algorithm`.
     pub fn digest(algorithm: &'static Algorithm, data: &[u8]) -> Digest {
         let mut ctx = Context::new(algorithm);
         ctx.update(data);
@@ -547,6 +633,7 @@ pub mod digest {
     }
 }
 
+/// Stub PKCS#8 types required for `sigstore-crypto`'s signing module to compile.
 pub mod pkcs8 {
     use crate::error;
 
@@ -576,6 +663,8 @@ pub mod pkcs8 {
     }
 }
 
+/// Digital signature verification (`aws_lc_rs::signature`) for ECDSA (P-256, P-384, P-521),
+/// Ed25519, and RSA (PKCS#1 v1.5 and PSS), backed by BoringSSL's `EVP_PKEY` API.
 pub mod signature {
     use crate::digest::DigestId;
     use crate::FFI::{EVP_PKEY_ALG, EVP_PKEY_CTX};
@@ -588,19 +677,25 @@ pub mod signature {
 
     pub const MAX_LEN: usize = 1024;
 
-    // AlgorithmIdentifier DER constants for SubjectPublicKeyInfo wrapping:
+    // Pre-encoded ASN.1 DER `AlgorithmIdentifier` headers used by `wrap_spki` to wrap raw
+    // `ring`/`aws-lc-rs` public key bytes into a full X.509 `SubjectPublicKeyInfo` (SPKI)
+    // structure that BoringSSL's `EVP_PKEY_from_subject_public_key_info` can parse:
+    // - `id-ecPublicKey` (1.2.840.10045.2.1) + `prime256v1` (1.2.840.10045.3.1.7)
     const ALG_ID_EC_P256: &[u8] = &[
         0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86,
         0x48, 0xce, 0x3d, 0x03, 0x01, 0x07,
     ];
+    // - `id-ecPublicKey` (1.2.840.10045.2.1) + `secp384r1` (1.3.132.0.34)
     const ALG_ID_EC_P384: &[u8] = &[
         0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x05, 0x2b, 0x81,
         0x04, 0x00, 0x22,
     ];
+    // - `id-ecPublicKey` (1.2.840.10045.2.1) + `secp521r1` (1.3.132.0.35)
     const ALG_ID_EC_P521: &[u8] = &[
         0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x05, 0x2b, 0x81,
         0x04, 0x00, 0x23,
     ];
+    // - `rsaEncryption` (1.2.840.113549.1.1.1) + NULL parameters
     const ALG_ID_RSA_ENCRYPTION: &[u8] = &[
         0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00,
     ];
@@ -643,7 +738,9 @@ pub mod signature {
         fn public_key(&self) -> &Self::PublicKey;
     }
 
+    /// Trait implemented by all signature verification parameter sets (`ECDSA_*`, `ED25519`, `RSA_*`).
     pub trait VerificationAlgorithm: fmt::Debug + Sync {
+        /// Hashes `msg` and verifies `signature` against `public_key`.
         fn verify_sig(
             &self,
             public_key: &[u8],
@@ -651,6 +748,8 @@ pub mod signature {
             signature: &[u8],
         ) -> Result<(), error::Unspecified>;
 
+        /// Verifies `signature` against a precomputed `digest` (supported for ECDSA and RSA;
+        /// Ed25519 does not support pre-hashed digests in PureEdDSA mode).
         fn verify_digest_sig(
             &self,
             _public_key: &[u8],
@@ -661,6 +760,8 @@ pub mod signature {
         }
     }
 
+    // Post-quantum ML-DSA algorithm constants referenced by `rustls-webpki` 0.103+.
+    // Sigstore bundles do not currently use ML-DSA, so verification returns `Err(Unspecified)`.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum MlDsaAlg {
         MlDsa44,
@@ -697,6 +798,7 @@ pub mod signature {
     }
 
     impl EcdsaCurve {
+        /// Size in bytes of a single field coordinate (`X`, `Y`, `r`, or `s`) on this curve.
         pub(crate) fn coord_len(self) -> usize {
             match self {
                 EcdsaCurve::P256 => 32,
@@ -705,10 +807,12 @@ pub mod signature {
             }
         }
 
+        /// Expected byte length of an SEC1 uncompressed EC point (`0x04 || X || Y`).
         pub(crate) fn uncompressed_pub_len(self) -> usize {
             1 + 2 * self.coord_len()
         }
 
+        /// Expected byte length of an SEC1 compressed EC point (`0x02/0x03 || X`).
         pub(crate) fn compressed_pub_len(self) -> usize {
             1 + self.coord_len()
         }
@@ -735,7 +839,9 @@ pub mod signature {
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum EcdsaSigFormat {
+        /// Standard ASN.1 DER `SEQUENCE { r INTEGER, s INTEGER }`.
         Asn1,
+        /// IEEE P1363 fixed-width `r || s` concatenation.
         Fixed,
     }
 
@@ -861,6 +967,8 @@ pub mod signature {
         format: EcdsaSigFormat::Fixed,
     };
 
+    /// Parses an SEC1-encoded EC public point (`0x04 || X || Y` or compressed `0x02/0x03 || X`)
+    /// into a BoringSSL `EVP_PKEY*` by wrapping it in an SPKI DER header.
     fn parse_ec_public_key(
         curve: EcdsaCurve,
         public_key: &[u8],
@@ -886,6 +994,11 @@ pub mod signature {
         EvpPkey::from_ptr(ptr)
     }
 
+    /// Hashes `msg` with `md` and verifies `sig` against `pkey` using BoringSSL's
+    /// `EVP_DigestVerifyInit` + `EVP_DigestVerify`.
+    ///
+    /// `configure_pctx` is used by RSA verification to configure PKCS#1 v1.5 or PSS padding on
+    /// the underlying `EVP_PKEY_CTX*` before verification runs.
     pub(crate) fn evp_digest_verify(
         pkey: &EvpPkey,
         md: *const crate::FFI::EVP_MD,
@@ -924,6 +1037,11 @@ pub mod signature {
         }
     }
 
+    /// Verifies `sig` against an *already-computed* hash (`digest_bytes`) using BoringSSL's
+    /// `EVP_PKEY_verify_init` + `EVP_PKEY_CTX_set_signature_md` + `EVP_PKEY_verify`.
+    ///
+    /// Used when verifying a Sigstore bundle against a precomputed SHA-256 artifact digest
+    /// (`SigstoreClient.verify(artifactDigest: ...)`).
     pub(crate) fn evp_pkey_verify_digest(
         pkey: &EvpPkey,
         md: *const crate::FFI::EVP_MD,
@@ -1039,6 +1157,7 @@ pub mod signature {
                 (s.EVP_PKEY_from_raw_public_key)(alg, public_key.as_ptr(), public_key.len())
             };
             let pkey = EvpPkey::from_ptr(ptr)?;
+            // Ed25519 (PureEdDSA) hashes the message internally in two passes, so `md` MUST be null.
             evp_digest_verify(&pkey, ptr::null(), msg, signature, |_| Ok(()))
         }
     }
@@ -1142,6 +1261,9 @@ pub mod signature {
         padding: RsaPadding::Pss,
     };
 
+    /// Parses a PKCS#1 `RSAPublicKey` DER sequence (`SEQUENCE { n INTEGER, e INTEGER }`) into a
+    /// BoringSSL `EVP_PKEY*` by wrapping it in an SPKI DER header, and checks that the modulus bit
+    /// length falls within `[min_bits, max_bits]`.
     fn parse_rsa_public_key(
         public_key: &[u8],
         min_bits: usize,
@@ -1231,6 +1353,8 @@ pub mod signature {
         }
     }
 
+    /// Primary verification entry point in the `ring`/`aws-lc-rs` API: pairs a
+    /// [`VerificationAlgorithm`] with raw public key bytes (`B`).
     #[derive(Clone)]
     pub struct UnparsedPublicKey<B> {
         algorithm: &'static dyn VerificationAlgorithm,
@@ -1288,6 +1412,14 @@ pub mod signature {
             f.debug_tuple("PublicKey").field(&self.bytes).finish()
         }
     }
+
+    // ========================================================================
+    // Stub Signing KeyPair Types (`EcdsaKeyPair`, `Ed25519KeyPair`, `RsaKeyPair`)
+    // ========================================================================
+    // `sigstore-crypto` defines signing helpers in the same crate as its verification helpers.
+    // Even though `package:sigstore` only calls verification functions (and LTO dead-code
+    // eliminates the unused signing functions from the final binary), the key-pair structs and
+    // their method signatures must exist here so `sigstore-crypto` compiles cleanly.
 
     pub struct EcdsaKeyPair {
         alg: &'static EcdsaSigningAlgorithm,
@@ -1447,6 +1579,7 @@ pub mod signature {
     }
 }
 
+/// Re-export matching `aws_lc_rs::rsa::KeyPair`.
 pub mod rsa {
     pub use crate::signature::RsaKeyPair as KeyPair;
 }

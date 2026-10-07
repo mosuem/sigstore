@@ -4,12 +4,21 @@ version = "0.2.0"
 edition = "2021"
 
 [lib]
+# - cdylib: produces the shared library (.so / .dylib / .dll) loaded by Dart FFI
+# - staticlib: supports static linking on platforms that require it (e.g. iOS)
+# - rlib: allows Rust unit/integration tests and Diplomat tools to inspect the crate
 crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
+# Local shim that implements the `aws-lc-rs` API by forwarding calls to
+# Dart's `package:boring` (BoringSSL) via a function pointer table.
 aws-lc-rs = { path = "aws-lc-rs-boring" }
 diplomat = "0.16.1"
 diplomat-runtime = "0.16.0"
+
+# `default-features = false` disables `sigstore-rust`'s built-in `reqwest`/`tokio`
+# HTTP client and native crypto backends so we can drive TUF HTTP requests from
+# Dart's `HttpClient` and route all crypto through `package:boring`.
 sigstore-verify = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3", default-features = false }
 sigstore-types = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3" }
 sigstore-trust-root = { git = "https://github.com/sigstore/sigstore-rust", rev = "5f69a462909f4cfcfa216bc1f7c196c615ba7cf3", default-features = false }
@@ -19,8 +28,11 @@ serde_json = "1.0"
 thiserror = "2.0"
 
 [patch.crates-io]
+# Redirects every transitive dependency on `aws-lc-rs` (from `sigstore-crypto`
+# and `rustls-webpki`) to our local `package:boring`-backed shim crate.
 aws-lc-rs = { path = "aws-lc-rs-boring" }
 
+# Optimize release builds for small binary size (~765 KB shared library).
 [profile.release]
 opt-level = "s"
 lto = true
