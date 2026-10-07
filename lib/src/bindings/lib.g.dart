@@ -11,13 +11,12 @@ import 'dart:ffi' as ffi;
 import 'dart:typed_data';
 import 'package:ffi/ffi.dart' as ffi2 show Arena, calloc;
 import 'package:meta/meta.dart' as meta;
-import '../boring_init.dart';
 part 'SigstoreBundle.g.dart';
-part 'SigstoreClient.g.dart';
 part 'SigstoreError.g.dart';
 part 'SigstoreTufUpdater.g.dart';
 part 'SigstoreVerificationPolicy.g.dart';
 part 'SigstoreVerificationResult.g.dart';
+part 'SigstoreVerifier.g.dart';
 
 /// A [Rune] is a Unicode code point, such as `a`, or `💡`.
 ///

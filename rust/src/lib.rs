@@ -138,9 +138,9 @@ pub mod ffi {
     #[diplomat::opaque]
     pub struct SigstoreBundle(pub sigstore_types::Bundle);
 
-    /// Client for verifying Sigstore signatures and managing trusted root material.
+    /// Internal FFI entry point for initializing BoringSSL symbols and verifying Sigstore bundles.
     #[diplomat::opaque]
-    pub struct SigstoreClient(pub ());
+    pub struct SigstoreVerifier;
 
     /// State machine driving the `sigstore-tuf` verification workflow over an external HTTP client.
     #[diplomat::opaque]
@@ -263,7 +263,7 @@ pub mod ffi {
         }
     }
 
-    impl SigstoreClient {
+    impl SigstoreVerifier {
         /// Initializes the BoringSSL function pointer table from `package:boring` (`libbssl_dart`).
         ///
         /// `symbol_addrs` must contain the exact 28 function pointers defined by `BoringSymbols`.
@@ -274,11 +274,6 @@ pub mod ffi {
             }
         }
 
-        /// Creates a new Sigstore client instance.
-        pub fn create() -> Box<SigstoreClient> {
-            Box::new(SigstoreClient(()))
-        }
-
         /// Verifies an artifact against a Sigstore bundle and verification policy.
         ///
         /// - `artifact_bytes`: Raw artifact bytes, or precomputed SHA-256 digest bytes if `is_digest` is true.
@@ -286,7 +281,6 @@ pub mod ffi {
         /// - `bundle`: The parsed bundle containing signatures and verification material.
         /// - `policy`: The verification policy specifying expected identity, issuer, and trusted root.
         pub fn verify(
-            &self,
             artifact_bytes: &[u8],
             is_digest: bool,
             bundle: &SigstoreBundle,

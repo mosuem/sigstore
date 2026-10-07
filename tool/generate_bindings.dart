@@ -59,44 +59,5 @@ void main() async {
     exit(process.exitCode);
   }
 
-  _injectBoringAutoInit(outBindings);
-
   print('Dart bindings generated successfully.');
-}
-
-void _injectBoringAutoInit(Uri outBindings) {
-  final libFile = File.fromUri(outBindings.resolve('lib.g.dart'));
-  var libContent = libFile.readAsStringSync();
-  if (!libContent.contains("import '../boring_init.dart';")) {
-    libContent = libContent.replaceFirst(
-      "import 'package:meta/meta.dart' as meta;",
-      "import 'package:meta/meta.dart' as meta;\nimport '../boring_init.dart';",
-    );
-    libFile.writeAsStringSync(libContent);
-  }
-
-  final clientFile = File.fromUri(outBindings.resolve('SigstoreClient.g.dart'));
-  var clientContent = clientFile.readAsStringSync();
-  if (!clientContent.contains('ensureBoringInitialized();')) {
-    clientContent = clientContent.replaceFirst(
-      'static SigstoreClient create() {\n',
-      'static SigstoreClient create() {\n    ensureBoringInitialized();\n',
-    );
-    clientFile.writeAsStringSync(clientContent);
-  }
-
-  final tufFile = File.fromUri(
-    outBindings.resolve('SigstoreTufUpdater.g.dart'),
-  );
-  var tufContent = tufFile.readAsStringSync();
-  if (!tufContent.contains('ensureBoringInitialized();')) {
-    tufContent = tufContent.replaceFirst(
-      'static SigstoreTufUpdater create('
-          'String tufMirrorUrl, String cacheDir) {\n',
-      'static SigstoreTufUpdater create('
-          'String tufMirrorUrl, String cacheDir) {\n'
-          '    ensureBoringInitialized();\n',
-    );
-    tufFile.writeAsStringSync(tufContent);
-  }
 }

@@ -8,9 +8,42 @@ import 'dart:typed_data';
 import 'bindings/lib.g.dart';
 import 'boring_init.dart';
 
-/// Extension on [SigstoreClient] driving the Rust `sigstore-tuf` verification
-/// state machine over Dart's [HttpClient].
-extension SigstoreClientTuf on SigstoreClient {
+/// Client for verifying Sigstore signatures and refreshing trusted root
+/// material.
+final class SigstoreClient {
+  SigstoreClient._();
+
+  /// Creates a new Sigstore client instance and initializes the underlying
+  /// `package:boring` cryptographic function table.
+  // ignore: prefer_constructors_over_static_methods
+  static SigstoreClient create() {
+    ensureBoringInitialized();
+    return SigstoreClient._();
+  }
+
+  /// Verifies an artifact against a Sigstore [bundle] and verification
+  /// [policy].
+  ///
+  /// - [artifactBytes]: Raw artifact bytes, or precomputed SHA-256 digest bytes
+  ///   if [isDigest] is `true`.
+  /// - [isDigest]: Set to `true` if [artifactBytes] contains the precomputed
+  ///   SHA-256 digest (32 bytes).
+  /// - [bundle]: The parsed bundle containing signatures and verification
+  ///   material.
+  /// - [policy]: The verification policy specifying expected identity, issuer,
+  ///   and trusted root.
+  ///
+  /// Throws [SigstoreError] on failure.
+  SigstoreVerificationResult verify(
+    List<int> artifactBytes,
+    bool isDigest,
+    SigstoreBundle bundle,
+    SigstoreVerificationPolicy policy,
+  ) {
+    ensureBoringInitialized();
+    return SigstoreVerifier.verify(artifactBytes, isDigest, bundle, policy);
+  }
+
   /// Refreshes the TUF trusted root from the Sigstore TUF mirror into
   /// [cacheDir] using full TUF verification (`sigstore-tuf`).
   ///

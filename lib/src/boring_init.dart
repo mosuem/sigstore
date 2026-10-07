@@ -16,7 +16,7 @@ bool _boringInitialized = false;
 void ensureBoringInitialized() {
   if (_boringInitialized) return;
   _retainBoringSymbolsForRecordUse();
-  SigstoreClient.initBoring(_boringSymbolAddresses());
+  SigstoreVerifier.initBoring(_boringSymbolAddresses());
   _boringInitialized = true;
 }
 

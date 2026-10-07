@@ -32,7 +32,6 @@ final class SigstoreTufUpdater implements ffi.Finalizable {
   ///
   /// Throws [SigstoreError] on failure.
   static SigstoreTufUpdater create(String tufMirrorUrl, String cacheDir) {
-    ensureBoringInitialized();
     final temp = _FinalizedArena();
     final result = _sigstore_SigstoreTufUpdater_create_mv1(tufMirrorUrl._utf8AllocIn(temp.arena), cacheDir._utf8AllocIn(temp.arena));
     if (!result.isOk) {
