@@ -222,6 +222,7 @@ final class CheckoutMode extends BuildMode {
     return [
       root.resolve('Cargo.lock'),
       root.resolve('src/lib.rs'),
+      root.resolve('aws-lc-rs-boring/src/lib.rs'),
     ];
   }
 }

@@ -1,0 +1,25 @@
+[package]
+name = "aws-lc-rs"
+version = "1.18.0"
+edition = "2021"
+description = "BoringSSL (package:boring) shim for aws-lc-rs used by sigstore-dart"
+license = "BSD-3-Clause"
+
+# Feature flags declared by upstream `aws-lc-rs`.
+# We define matching no-op feature names here so downstream crates like
+# `rustls-webpki` and `sigstore-crypto` can enable features such as `alloc`
+# or `ring-sig-verify` in their Cargo.toml without Cargo failing feature resolution.
+[features]
+default = ["alloc"]
+alloc = []
+ring-io = []
+ring-sig-verify = []
+unstable = []
+fips = []
+non-fips = []
+asan = []
+bindgen = []
+prebuilt-nasm = []
+test_logging = []
+dev-tests-only = []
+aws-lc-sys = []

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0
+
+- **Breaking**: `SigstoreClient.refreshTrustedRoot` now returns `Future<String>` instead of `String` and accepts an optional `HttpClient? httpClient` parameter.
+- Replace `aws-lc-rs` / `aws-lc-sys` with a `package:boring` (`libbssl_dart`) cryptographic shim, eliminating the bundled AWS-LC C/assembly library and routing all hashing, RSA, ECDSA, and Ed25519 operations through `package:boring`.
+- Replace embedded `tokio`, `reqwest`, `hyper`, and `rustls` HTTP stack with a state-machine TUF bridge (`SigstoreTufUpdater`) driven by `dart:io` `HttpClient` while retaining `sigstore-tuf`'s full TUF root rotation, metadata verification, and target caching engine in Rust.
+- Reduce precompiled `libsigstore_ffi` binary size by ~70% (~6.3 MB to ~1.9 MB).
+- Upgrade `code_assets` to `^2.1.0` and `hooks` to `^2.2.0`.
+
 ## 0.1.5
 
 - Update documentation and package description to correctly reference `sigstore-rust`.
