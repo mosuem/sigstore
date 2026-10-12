@@ -8,12 +8,12 @@
 //!
 //! ## Key Architectural Choices
 //!
-//! 1. **Zero bundled C/C++ crypto (`aws-lc-rs-boring`)**:
-//!    Instead of compiling Amazon's `aws-lc-sys` C/C++/ASM library (~2.4 MB), our `Cargo.toml`
-//!    patches `aws-lc-rs` to point at `rust/aws-lc-rs-boring`. At startup, Dart resolves 28
-//!    BoringSSL function pointers from `package:boring` (`libbssl_dart`) and passes them to
-//!    [`ffi::SigstoreVerifier::init_boring`]. All SHA-2, ECDSA, Ed25519, and RSA operations in
-//!    `sigstore-rust` and `rustls-webpki` then call directly into `package:boring`.
+//! 1. **Zero bundled C/C++ crypto (`boring_provider`)**:
+//!    Instead of compiling Amazon's `aws-lc-sys` C/C++/ASM library (~2.4 MB), we disable default
+//!    features (`aws-lc-rs`) on `sigstore-rust` and implement `sigstore_crypto::CryptoProvider` in
+//!    [`boring_provider`]. At startup, Dart resolves 25 BoringSSL function pointers from
+//!    `package:boring` (`libbssl_dart`) and passes them to [`ffi::SigstoreVerifier::init_boring`],
+//!    which registers [`boring_provider`] via `sigstore_crypto::install_default_provider`.
 //!
 //! 2. **Zero bundled HTTP stack (Sans-IO TUF state machine)**:
 //!    `sigstore-tuf` is written in `async` Rust and expects an asynchronous `Repository` trait to
@@ -31,6 +31,8 @@
 //!    - `&DiplomatStr` is a borrowed UTF-8 byte slice (`&[u8]`) passed from a Dart `String`.
 //!    - `&mut DiplomatWrite` is a growable buffer owned by Diplomat that Rust writes UTF-8 output
 //!      into, which Diplomat then converts into a Dart `String` on return.
+
+pub mod boring_provider;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -115,7 +117,7 @@ impl Future for BridgeFetchFuture {
         if let Some(res) = st.response.take() {
             if let Ok(Some(ref body)) = res {
                 if body.len() as u64 > this.max_length {
-                    return Poll::Ready(Err(sigstore_tuf::Error::Transport(format!(
+                    return Poll::Ready(Err(sigstore_tuf::Error::transport(format!(
                         "{}: response exceeds max length {}",
                         this.url, this.max_length
                     ))));
@@ -291,9 +293,9 @@ pub mod ffi {
             let cert_der = match &self.0.verification_material.content {
                 sigstore_types::bundle::VerificationMaterialContent::X509CertificateChain {
                     certificates,
-                } => certificates.first().map(|c| c.raw_bytes.as_ref()),
+                } => certificates.first().map(|c| &c.raw_bytes),
                 sigstore_types::bundle::VerificationMaterialContent::Certificate(cert) => {
-                    Some(cert.raw_bytes.as_ref())
+                    Some(&cert.raw_bytes)
                 }
                 _ => None,
             };
@@ -323,7 +325,11 @@ pub mod ffi {
             write: &mut DiplomatWrite,
         ) -> Result<(), SigstoreError> {
             let info = self.cert_info()?;
-            let subject = info.identity.unwrap_or_default();
+            let subject = info
+                .identity
+                .as_ref()
+                .map(|s| s.as_str())
+                .unwrap_or_default();
             write!(write, "{}", subject).map_err(|_| SigstoreError::InternalError)?;
             Ok(())
         }
@@ -345,20 +351,20 @@ pub mod ffi {
                 .verification_material
                 .tlog_entries
                 .first()
-                .map_or(-1, |e| e.log_index.value())
+                .map_or(-1, |e| u64::from(e.log_index) as i64)
         }
     }
 
     impl SigstoreVerifier {
         /// Initializes the BoringSSL function pointer table from `package:boring` (`libbssl_dart`).
         ///
-        /// `symbol_addrs` must contain the exact 28 function pointers defined by `BoringSymbols`.
+        /// `symbol_addrs` must contain the exact 25 function pointers defined by `BoringSymbols`.
         pub fn init_boring(symbol_addrs: &[usize]) -> Result<(), SigstoreError> {
             // `symbol_addrs` comes from `Native.addressOf(...)` in `lib/src/boring_init.dart`.
-            // Once registered, `aws_lc_rs` routes all cryptographic operations through these
-            // BoringSSL C function pointers.
+            // Once registered, `sigstore-crypto` routes all cryptographic operations through
+            // `boring_provider` using these BoringSSL C function pointers.
             unsafe {
-                aws_lc_rs::init_boring_symbols_from_slice(symbol_addrs)
+                crate::boring_provider::init_boring_provider(symbol_addrs)
                     .map_err(|_| SigstoreError::InternalError)
             }
         }
@@ -395,9 +401,11 @@ pub mod ffi {
 
             // 2. Wrap the input bytes either as a pre-hashed 32-byte SHA-256 digest or raw bytes.
             let artifact = if is_digest {
-                sigstore_types::Artifact::from_digest(artifact_bytes)
+                let hash = sigstore_types::Sha256Hash::try_from(artifact_bytes)
+                    .map_err(|_| SigstoreError::VerificationFailed)?;
+                sigstore_types::Artifact::from_digest(hash)
             } else {
-                sigstore_types::Artifact::from_bytes(artifact_bytes)
+                sigstore_types::Artifact::from_blob(artifact_bytes)
             };
 
             // 3. Perform full Sigstore verification:
@@ -407,9 +415,10 @@ pub mod ffi {
             let res = if let Some(ref key_pem) = policy.public_key_pem {
                 let public_key = sigstore_types::DerPublicKey::from_pem(key_pem)
                     .map_err(|_| SigstoreError::VerificationFailed)?;
-                sigstore_verify::verify_with_key(artifact, &bundle.0, &public_key, &trusted_root)
+                let v_policy = sigstore_verify::PublicKeyVerificationPolicy::new(public_key);
+                sigstore_verify::verify(artifact, &bundle.0, &v_policy, &trusted_root)
             } else {
-                let mut v_policy = sigstore_verify::VerificationPolicy::default();
+                let mut v_policy = sigstore_verify::VerificationPolicy::any_identity();
                 if let Some(ref id) = policy.expected_identity {
                     v_policy = v_policy.require_identity(id.clone());
                 }
@@ -423,8 +432,11 @@ pub mod ffi {
 
             Ok(Box::new(SigstoreVerificationResult {
                 is_valid: true,
-                identity: res.identity.unwrap_or_default(),
-                issuer: res.issuer.unwrap_or_default(),
+                identity: res
+                    .identity()
+                    .map(|s| s.as_str().to_string())
+                    .unwrap_or_default(),
+                issuer: res.issuer().unwrap_or_default().to_string(),
             }))
         }
     }
@@ -567,7 +579,7 @@ pub mod ffi {
             st.response = Some(match status_code {
                 200..=299 => Ok(Some(body.to_vec())),
                 403 | 404 => Ok(None),
-                _ => Err(sigstore_tuf::Error::Transport(format!(
+                _ => Err(sigstore_tuf::Error::transport(format!(
                     "HTTP status {status_code}"
                 ))),
             });
@@ -578,7 +590,7 @@ pub mod ffi {
             let msg = std::str::from_utf8(message).unwrap_or("HTTP transport error");
             let mut st = self.0.state.lock().unwrap();
             st.pending_url = None;
-            st.response = Some(Err(sigstore_tuf::Error::Transport(msg.to_string())));
+            st.response = Some(Err(sigstore_tuf::Error::transport(msg.to_string())));
         }
 
         /// Writes the verified `trusted_root.json` string after `poll` returns `true`.

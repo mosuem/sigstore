@@ -30,7 +30,7 @@ final class SigstoreVerifier implements ffi.Finalizable {
 
   /// Initializes the BoringSSL function pointer table from `package:boring` (`libbssl_dart`).
   ///
-  /// `symbol_addrs` must contain the exact 28 function pointers defined by `BoringSymbols`.
+  /// `symbol_addrs` must contain the exact 25 function pointers defined by `BoringSymbols`.
   ///
   /// Throws [SigstoreError] on failure.
   static void initBoring(core.List<int> symbolAddrs) {
