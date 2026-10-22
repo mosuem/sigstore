@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+- Documentation-only release: describe the `sigstore_crypto::CryptoProvider` integration, correct the native library size reduction to the measured ~60% (the README and the 0.2.0 entry previously claimed ~70%), and note that ML-DSA signatures are not supported. Native binaries are unchanged (`binaries-v0.2.1`).
+
 ## 0.2.1
 
 - **Fix**: The default `fetch` build mode of 0.2.0 downloaded the `binaries-v0.1.4` native library, which predates the `package:boring` migration, so the first call failed with `Failed to lookup symbol 'sigstore_SigstoreVerifier_init_boring_mv1'`. 0.2.1 ships matching `binaries-v0.2.1` precompiled binaries.
@@ -13,7 +17,7 @@
 - **Breaking**: `SigstoreClient.refreshTrustedRoot` now returns `Future<String>` instead of `String` and accepts an optional `HttpClient? httpClient` parameter.
 - Replace `aws-lc-rs` / `aws-lc-sys` with a `package:boring` (`libbssl_dart`) cryptographic shim, eliminating the bundled AWS-LC C/assembly library and routing all hashing, RSA, ECDSA, and Ed25519 operations through `package:boring`.
 - Replace embedded `tokio`, `reqwest`, `hyper`, and `rustls` HTTP stack with a state-machine TUF bridge (`SigstoreTufUpdater`) driven by `dart:io` `HttpClient` while retaining `sigstore-tuf`'s full TUF root rotation, metadata verification, and target caching engine in Rust.
-- Reduce precompiled `libsigstore_ffi` binary size by ~70% (~6.3 MB to ~1.9 MB).
+- Reduce precompiled `libsigstore_ffi` binary size by ~60% (3.99 MB to 1.51 MB for the Linux x64 dynamic library; 3.05 MB to 1.27 MB on macOS arm64, 3.15 MB to 1.29 MB on Windows x64).
 - Upgrade `code_assets` to `^2.1.0` and `hooks` to `^2.2.0`.
 
 ## 0.1.5
