@@ -38,41 +38,26 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Setup Linux Cross-Compilers & Linkers
+      # The targets below mirror `linuxTargets` / `macosTargets` /
+      # `windowsTargets` in lib/src/hook_helpers/builder.dart. `sigstore_ffi` is
+      # pure Rust (all C crypto lives in package:boring), so cross-compiling only
+      # needs the Rust standard library for the target plus a linker.
+      - name: Setup Linux Cross-Compilation (aarch64)
         if: matrix.os == 'ubuntu-latest'
         run: |
+          rustup target add aarch64-unknown-linux-gnu
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf gcc-riscv64-linux-gnu gcc-i686-linux-gnu
-          
-          NDK_DIR="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-$ANDROID_NDK}}"
-          LLVM_BIN="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
           mkdir -p .cargo
           cat << EOCONFIG >> .cargo/config.toml
           [target.aarch64-unknown-linux-gnu]
           linker = "aarch64-linux-gnu-gcc"
-
-          [target.armv7-unknown-linux-gnueabihf]
-          linker = "arm-linux-gnueabihf-gcc"
-
-          [target.riscv64gc-unknown-linux-gnu]
-          linker = "riscv64-linux-gnu-gcc"
-
-          [target.i686-unknown-linux-gnu]
-          linker = "i686-linux-gnu-gcc"
-
-          [target.aarch64-linux-android]
-          linker = "$LLVM_BIN/aarch64-linux-android30-clang"
-
-          [target.armv7-linux-androideabi]
-          linker = "$LLVM_BIN/armv7a-linux-androideabi30-clang"
-
-          [target.i686-linux-android]
-          linker = "$LLVM_BIN/i686-linux-android30-clang"
-
-          [target.x86_64-linux-android]
-          linker = "$LLVM_BIN/x86_64-linux-android30-clang"
           EOCONFIG
+
+      - name: Setup macOS Cross-Compilation (x86_64)
+        if: matrix.os == 'macos-latest'
+        run: rustup target add x86_64-apple-darwin
 
       - name: Precompile Binaries
         run: dart run tool/precompile_binaries.dart --compile-type=${{ matrix.compiletype }} --out-dir=bin

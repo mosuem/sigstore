@@ -37,7 +37,7 @@ void main() {
       final decoded = jsonDecode(exportedJson) as Map<String, Object?>;
       expect(
         decoded['mediaType'],
-        equals('application/vnd.dev.sigstore.bundle+json;version=0.3'),
+        equals('application/vnd.dev.sigstore.bundle.v0.3+json'),
       );
     });
 

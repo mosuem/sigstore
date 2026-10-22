@@ -33,10 +33,10 @@ void ensureBoringInitialized() {
 int _addressOf(Function tearOff, ffi.Pointer<ffi.NativeType> pointer) =>
     identityHashCode(tearOff) == 0 ? 0 : pointer.address;
 
-/// Returns the addresses of the 28 BoringSSL functions required by
-/// `rust/aws-lc-rs-boring` (`BoringSymbols`).
+/// Returns the addresses of the 25 BoringSSL functions required by
+/// `rust/src/boring_provider.rs` (`BoringSymbols`).
 ///
-/// All 28 functions are required at runtime because `sigstore-verify` and
+/// All 25 functions are required at runtime because `sigstore-verify` and
 /// `sigstore-tuf` dispatch digest and signature algorithms dynamically based on
 /// the certificates and keys in the runtime bundle or TUF metadata.
 List<int> _boringSymbolAddresses() => <int>[
@@ -71,17 +71,6 @@ List<int> _boringSymbolAddresses() => <int>[
     >(bssl.EVP_MD_CTX_new),
   ),
   bssl.addresses.EVP_MD_CTX_free.address,
-  _addressOf(
-    bssl.EVP_MD_CTX_copy_ex,
-    ffi.Native.addressOf<
-      ffi.NativeFunction<
-        ffi.Int Function(
-          ffi.Pointer<bssl.EVP_MD_CTX>,
-          ffi.Pointer<bssl.EVP_MD_CTX>,
-        )
-      >
-    >(bssl.EVP_MD_CTX_copy_ex),
-  ),
   _addressOf(
     bssl.EVP_DigestInit_ex,
     ffi.Native.addressOf<
@@ -147,12 +136,6 @@ List<int> _boringSymbolAddresses() => <int>[
     >(bssl.EVP_DigestVerify),
   ),
   bssl.addresses.EVP_PKEY_free.address,
-  _addressOf(
-    bssl.EVP_PKEY_bits,
-    ffi.Native.addressOf<
-      ffi.NativeFunction<ffi.Int Function(ffi.Pointer<bssl.EVP_PKEY>)>
-    >(bssl.EVP_PKEY_bits),
-  ),
   _addressOf(
     bssl.EVP_PKEY_CTX_new,
     ffi.Native.addressOf<
@@ -223,12 +206,6 @@ List<int> _boringSymbolAddresses() => <int>[
     ffi.Native.addressOf<
       ffi.NativeFunction<ffi.Pointer<bssl.EVP_PKEY_ALG> Function()>
     >(bssl.EVP_pkey_ec_p384),
-  ),
-  _addressOf(
-    bssl.EVP_pkey_ec_p521,
-    ffi.Native.addressOf<
-      ffi.NativeFunction<ffi.Pointer<bssl.EVP_PKEY_ALG> Function()>
-    >(bssl.EVP_pkey_ec_p521),
   ),
   _addressOf(
     bssl.EVP_pkey_ed25519,
