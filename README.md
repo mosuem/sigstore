@@ -1,6 +1,6 @@
 # Sigstore Dart Client (`package:sigstore`)
 
-A Dart client library for [Sigstore](https://www.sigstore.dev/) focused on **cryptographic bundle inspection and artifact verification**. It wraps the official [`sigstore-rust`](https://github.com/sigstore/sigstore-rust) verification crates (`sigstore-verify`, `sigstore-trust-root`, `sigstore-tuf`, `sigstore-types`) using **[Diplomat](https://github.com/rust-diplomat/diplomat)** for FFI code generation, Dart **Native Assets** (`hook/build.dart`), and **[`package:boring`](https://pub.dev/packages/boring)** for all underlying BoringSSL cryptography.
+A Dart client library for [Sigstore](https://www.sigstore.dev/) focused on **cryptographic bundle inspection and artifact verification**. It wraps the official [`sigstore-rust`](https://github.com/sigstore/sigstore-rust) verification crates (`sigstore-verify`, `sigstore-trust-root`, `sigstore-tuf`, `sigstore-types`, `sigstore-crypto`) using **[Diplomat](https://github.com/rust-diplomat/diplomat)** for FFI code generation, Dart **Native Assets** (`hook/build.dart`), and **[`package:boring`](https://pub.dev/packages/boring)** for all underlying BoringSSL cryptography.
 
 > [!NOTE]
 > **Scope**: This package is **verification-only**. It verifies artifacts and software supply chain signatures against Sigstore bundles (including Fulcio X.509 certificates, Rekor transparency logs, RFC 3161 timestamps, and custom/production/staging trusted roots). Keyless signing (which requires interactive OIDC authorization and CA submission) is not part of this package.
@@ -8,7 +8,7 @@ A Dart client library for [Sigstore](https://www.sigstore.dev/) focused on **cry
 ## Features
 
 - **100% Upstream Verification Conformance**: Passes all 140 applicable bundle verification test suites from [`sigstore-conformance`](https://github.com/sigstore/sigstore-conformance).
-- **Powered by `package:boring` (Zero AWS-LC)**: Routes all cryptographic operations (SHA-256/384/512, ECDSA P-256/P-384, Ed25519, RSA PKCS#1 v1.5 & PSS) through `package:boring` (`libbssl_dart`), eliminating `aws-lc-sys` and shrinking the native library by ~70%.
+- **Powered by `package:boring` (Zero AWS-LC)**: Implements `sigstore-rust`'s `sigstore_crypto::CryptoProvider` on top of `package:boring` (`libbssl_dart`), so all cryptographic operations (SHA-256/384/512, ECDSA P-256/P-384, Ed25519, RSA PKCS#1 v1.5 & PSS) run in BoringSSL. This eliminates `aws-lc-sys` and shrinks the native library by ~60% (3.99 MB → 1.51 MB for Linux x64). ML-DSA (post-quantum) signatures are not supported by this backend yet.
 - **TUF Trusted Root Refresh via Dart HTTP**: Uses `sigstore-tuf`'s TUF verification state machine driven by Dart's `HttpClient` (`await client.refreshTrustedRoot(...)`) with zero embedded Rust HTTP/TLS stack (`tokio`/`reqwest`/`hyper`/`rustls`).
 - **Flexible Trusted Roots**: Supports verification with the Sigstore Public Good Instance (Production), Sigstore Staging, live TUF-refreshed roots, or custom `trusted_root.json` files.
 - **Identity & Issuer Policy Verification**: Validates signer Subject Alternative Name (SAN) identities and OIDC issuers.
