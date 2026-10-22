@@ -2,7 +2,7 @@
 //!
 //! # Overview for Dart Developers
 //!
-//! With [`sigstore/sigstore-rust#326`](https://github.com/sigstore/sigstore-rust/pull/326),
+//! Since `sigstore-rust` 0.15.0 ([`sigstore/sigstore-rust#326`](https://github.com/sigstore/sigstore-rust/pull/326)),
 //! `sigstore-crypto` exposes a first-class [`CryptoProvider`] trait (`hash`, `verify_raw`,
 //! `verify_prehashed`) and an optional `aws-lc-rs` Cargo feature.
 //!
@@ -52,13 +52,13 @@ const RSA_PSS_SALTLEN_DIGEST: c_int = -1;
 // `SubjectPublicKeyInfo` (SPKI) DER structure for `EVP_PKEY_from_subject_public_key_info`:
 // - `id-ecPublicKey` (1.2.840.10045.2.1) + `prime256v1` (1.2.840.10045.3.1.7)
 const ALG_ID_EC_P256: &[u8] = &[
-    0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86,
-    0x48, 0xce, 0x3d, 0x03, 0x01, 0x07,
+    0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48,
+    0xce, 0x3d, 0x03, 0x01, 0x07,
 ];
 // - `id-ecPublicKey` (1.2.840.10045.2.1) + `secp384r1` (1.3.132.0.34)
 const ALG_ID_EC_P384: &[u8] = &[
-    0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x05, 0x2b, 0x81,
-    0x04, 0x00, 0x22,
+    0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x05, 0x2b, 0x81, 0x04,
+    0x00, 0x22,
 ];
 // - `rsaEncryption` (1.2.840.113549.1.1.1) + NULL parameters
 const ALG_ID_RSA_ENCRYPTION: &[u8] = &[
@@ -394,12 +394,10 @@ unsafe fn configure_rsa_padding(scheme: SigningScheme, pctx: *mut EVP_PKEY_CTX) 
     match scheme {
         SigningScheme::RsaPkcs1Sha256
         | SigningScheme::RsaPkcs1Sha384
-        | SigningScheme::RsaPkcs1Sha512 => {
-            unsafe { (s.EVP_PKEY_CTX_set_rsa_padding)(pctx, RSA_PKCS1_PADDING) == 1 }
-        }
-        SigningScheme::RsaPssSha256
-        | SigningScheme::RsaPssSha384
-        | SigningScheme::RsaPssSha512 => unsafe {
+        | SigningScheme::RsaPkcs1Sha512 => unsafe {
+            (s.EVP_PKEY_CTX_set_rsa_padding)(pctx, RSA_PKCS1_PADDING) == 1
+        },
+        SigningScheme::RsaPssSha256 | SigningScheme::RsaPssSha384 | SigningScheme::RsaPssSha512 => unsafe {
             (s.EVP_PKEY_CTX_set_rsa_padding)(pctx, RSA_PKCS1_PSS_PADDING) == 1
                 && (s.EVP_PKEY_CTX_set_rsa_pss_saltlen)(pctx, RSA_PSS_SALTLEN_DIGEST) == 1
         },
