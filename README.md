@@ -14,7 +14,7 @@ A Dart client library for [Sigstore](https://www.sigstore.dev/) focused on **cry
 - **Identity & Issuer Policy Verification**: Validates signer Subject Alternative Name (SAN) identities and OIDC issuers.
 - **Pre-computed Digest & Raw Byte Verification**: Verifies both raw artifact files and SHA-256 pre-computed digests (`sha256:...`).
 - **Flexible Native Asset Modes** (following `package:icu4x` conventions):
-  - `fetch` (default for package consumers): Automatically downloads precompiled native binaries from GitHub releases and verifies their SHA-256 hashes against `lib/src/hook_helpers/hashes.dart`.
+  - `fetch` (default for package consumers): Automatically downloads precompiled native binaries from GitHub releases and verifies their SHA-256 hashes against `lib/src/hook_helpers/hashes.dart`. Precompiled binaries exist for Linux x64/arm64, macOS x64/arm64, and Windows x64 (the platforms `package:boring` ships prebuilt BoringSSL for); other targets must use `checkout`.
   - `checkout`: Builds fresh native binaries directly from the embedded Rust crate using `cargo`.
   - `local`: Links against an existing binary specified via `localPath`.
 
@@ -88,6 +88,9 @@ dart run tool/regenerate_hashes.dart <github-release-tag>
 
 Because this package ships precompiled native binaries for multiple platforms in `fetch` mode, releases follow a simple 4-step workflow to ensure binary hashes are calculated and committed before publishing to `pub.dev`.
 
+> [!IMPORTANT]
+> Steps 2 and 3 are not optional. Consumers use `fetch` mode by default, so a version published while `lib/src/hook_helpers/hashes.dart` still points at the previous `binaries-v*` release ships binaries that do not match its Dart bindings and fails at runtime with `Failed to lookup symbol ...`. The `Fetch Mode Tests` CI jobs run the test suite from a consumer package against the pinned binaries, so they stay red on `main` until step 3 is merged.
+
 ### 1. Update Code & Regenerate Bindings (if Rust changed)
 If modifying Rust code in `rust/src/`:
 ```bash
@@ -97,26 +100,26 @@ dart test
 ```
 
 ### 2. Bump Version & Build Precompiled Binaries
-1. Update `version` in `pubspec.yaml` and document changes in `CHANGELOG.md` (e.g., `0.2.0`).
-2. Trigger the GitHub Actions binary build for `binaries-v<version>`:
+1. Update `version` in `pubspec.yaml` and `rust/Cargo.toml` and document changes in `CHANGELOG.md` (e.g., `0.2.1`), then merge that into `main`.
+2. Trigger the GitHub Actions binary build for `binaries-v<version>` from the merged commit:
    ```bash
-   gh workflow run release-binaries.yml -f tag=binaries-v0.2.0
+   git tag binaries-v0.2.1 && git push origin binaries-v0.2.1
    ```
-   *(Or trigger manually in GitHub under **Actions &rarr; Release Binaries &rarr; Run workflow**)*
-3. Wait for the workflow to finish building across Linux, macOS, and Windows runners and attaching assets to the `binaries-v0.2.0` GitHub Release.
+   *(Or trigger manually in GitHub under **Actions &rarr; Release Binaries &rarr; Run workflow** with the tag as input)*
+3. Wait for the workflow to finish building across Linux, macOS, and Windows runners and attaching assets to the `binaries-v0.2.1` GitHub Release. The build fails if any of the targets in `lib/src/hook_helpers/builder.dart` is missing.
 
 ### 3. Regenerate Hashes & Open PR
-1. Run the hash generator to download the newly built binaries and populate `lib/src/hook_helpers/hashes.dart`:
+1. Run the hash generator to download the newly built binaries and populate `lib/src/hook_helpers/hashes.dart` (it refuses to write a partial table):
    ```bash
-   dart run tool/regenerate_hashes.dart binaries-v0.2.0
+   dart run tool/regenerate_hashes.dart binaries-v0.2.1
    ```
 2. Commit your changes to a feature branch and open a PR:
    ```bash
-   git checkout -b release-v0.2.0
-   git add pubspec.yaml CHANGELOG.md lib/src/hook_helpers/hashes.dart
-   git commit -m "chore: prepare for 0.2.0 release"
-   git push -u origin release-v0.2.0
-   gh pr create --title "Release v0.2.0" --body "Prepare release 0.2.0"
+   git checkout -b release-v0.2.1
+   git add lib/src/hook_helpers/hashes.dart
+   git commit -m "chore: prepare for 0.2.1 release"
+   git push -u origin release-v0.2.1
+   gh pr create --title "Release v0.2.1" --body "Prepare release 0.2.1"
    ```
 3. CI will verify the checks, including downloading and testing the precompiled binaries across Linux, macOS, and Windows. The `dart-lang/ecosystem` publish bot will validate the package and comment that it is `ready to publish`.
 
@@ -125,7 +128,7 @@ dart test
 2. Tag the release commit and push the tag:
    ```bash
    git checkout main && git pull origin main
-   git tag v0.2.0
-   git push origin v0.2.0
+   git tag v0.2.1
+   git push origin v0.2.1
    ```
 3. The `.github/workflows/publish.yaml` workflow will automatically authenticate with `pub.dev` via OIDC and publish the package.

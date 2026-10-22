@@ -43,8 +43,6 @@ jobs:
         run: cargo clippy --manifest-path rust/Cargo.toml -- -D warnings
 
       - name: Run Dart Unit Tests (Checkout Mode)
-        env:
-          SIGSTORE_BUILD_MODE: checkout
         run: dart test
 
   conformance:
@@ -76,13 +74,24 @@ jobs:
           pip install pytest
 
       - name: Run Conformance Test Suite
-        env:
-          SIGSTORE_BUILD_MODE: checkout
         run: ./tool/run_conformance_tests.sh
 
+  # Build hooks only receive an allow-listed environment (so an env var like
+  # SIGSTORE_BUILD_MODE never reaches hook/build.dart), and `hooks.user_defines`
+  # are only read from the root package, whose pubspec selects `checkout` for
+  # development. To exercise what `dart pub add sigstore` gives users, this job
+  # runs the tests from a scratch consumer package that depends on this
+  # checkout: the default `fetch` build mode with the precompiled binaries pinned
+  # in lib/src/hook_helpers/hashes.dart.
+  #
+  # On pull requests the job is advisory: a PR that changes the FFI surface
+  # fails here until the matching `binaries-v<version>` release exists and
+  # hashes.dart points at it (see "Releasing" in README.md). On `main` it must
+  # pass, so `main` is never left pointing at binaries that don't match it.
   fetch-mode-ci:
     name: Fetch Mode Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     strategy:
       fail-fast: false
       matrix:
@@ -91,17 +100,34 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: sigstore
 
       - name: Setup Dart SDK
         uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
         with:
           sdk: stable
 
-      - name: Install Dart Dependencies
-        run: dart pub get
+      - name: Create Consumer Package
+        shell: bash
+        run: |
+          mkdir consumer
+          cp -r sigstore/test consumer/test
+          cat > consumer/pubspec.yaml << 'EOF'
+          name: sigstore_fetch_mode_consumer
+          publish_to: none
+          environment:
+            sdk: ^3.10.0
+          dependencies:
+            sigstore:
+              path: ../sigstore
+          dev_dependencies:
+            test: ^1.25.0
+          EOF
 
       - name: Run Dart Unit Tests (Fetch Mode)
-        env:
-          SIGSTORE_BUILD_MODE: fetch
-        run: dart test
+        working-directory: consumer
+        run: |
+          dart pub get
+          dart test
 

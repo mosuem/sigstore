@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+- **Fix**: The default `fetch` build mode of 0.2.0 downloaded the `binaries-v0.1.4` native library, which predates the `package:boring` migration, so the first call failed with `Failed to lookup symbol 'sigstore_SigstoreVerifier_init_boring_mv1'`. 0.2.1 ships matching `binaries-v0.2.1` precompiled binaries.
+- `fetch` mode now refuses to use a precompiled binary whose SHA-256 hash is not pinned in `hashes.dart` (previously such downloads ran unverified) and names the supported targets in the error.
+- Add precompiled binaries for `aarch64-unknown-linux-gnu` and `x86_64-apple-darwin`; `fetch` mode now covers Linux x64/arm64, macOS x64/arm64, and Windows x64, matching the platforms `package:boring` ships prebuilt BoringSSL for.
+- Replace the `[patch.crates-io]` `aws-lc-rs` shim crate with the `sigstore_crypto::CryptoProvider` API of `sigstore-rust` 0.15.0, implemented over `package:boring`; the BoringSSL symbol table shrinks from 28 to 25 functions.
+- Upgrade to `sigstore-rust` 0.15.0. `SigstoreBundle.toJson()` now emits the canonical v0.3 media type `application/vnd.dev.sigstore.bundle.v0.3+json` (previously `application/vnd.dev.sigstore.bundle+json;version=0.3`).
+
 ## 0.2.0
 
 - **Breaking**: `SigstoreClient.refreshTrustedRoot` now returns `Future<String>` instead of `String` and accepts an optional `HttpClient? httpClient` parameter.
