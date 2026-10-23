@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3
+
+- Bump `package:boring` constraint to `^0.4.2` for the BoringSSL intermediate certificate blocklist update ([`GHSA-3pvf-h66p-qwjp`](https://github.com/dart-lang/tools/security/advisories/GHSA-3pvf-h66p-qwjp)). Native binaries are unchanged (`binaries-v0.2.1`).
+
 ## 0.2.2
 
 - Documentation-only release: describe the `sigstore_crypto::CryptoProvider` integration, correct the native library size reduction to the measured ~60% (the README and the 0.2.0 entry previously claimed ~70%), and note that ML-DSA signatures are not supported. Native binaries are unchanged (`binaries-v0.2.1`).
