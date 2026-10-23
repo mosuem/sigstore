@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4
+
+- Fix `CheckoutMode.dependencies` in `hook/build.dart` to track `rust/src/boring_provider.rs` instead of the removed `rust/aws-lc-rs-boring/src/lib.rs` path. Native binaries are unchanged (`binaries-v0.2.1`).
+
 ## 0.2.3
 
 - Bump `package:boring` constraint to `^0.4.2` for the BoringSSL intermediate certificate blocklist update ([`GHSA-3pvf-h66p-qwjp`](https://github.com/dart-lang/tools/security/advisories/GHSA-3pvf-h66p-qwjp)). Native binaries are unchanged (`binaries-v0.2.1`).
