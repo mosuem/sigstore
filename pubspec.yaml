@@ -2,7 +2,7 @@ name: sigstore
 description: >
   Dart bindings for Sigstore wrapping sigstore-rust and package:boring for
   bundle inspection and cryptographic artifact verification.
-version: 0.2.2
+version: 0.2.3
 repository: https://github.com/mosuem/sigstore
 
 environment:
@@ -10,7 +10,7 @@ environment:
 
 dependencies:
   args: ^2.6.0
-  boring: ^0.4.1
+  boring: ^0.4.2
   code_assets: ^2.1.0
   crypto: ^3.0.7
   ffi: ^2.1.4
